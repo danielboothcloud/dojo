@@ -70,24 +70,58 @@ pub fn push_target(ctx: &Ctx) -> Result<(ChangeInfo, &'static str)> {
     Ok((ctx.change("@-")?, "@-"))
 }
 
-/// The bookmark of the current work: on `@`, else on `@-`.
-pub fn current_bookmark(ctx: &Ctx) -> Result<Option<String>> {
-    for rev in ["@", "@-"] {
-        let Ok(c) = ctx.change(rev) else { continue };
-        if let Some(b) = pick_bookmark(ctx, &c.local_bookmarks) {
-            return Ok(Some(b));
-        }
-    }
-    Ok(None)
+/// Where the bookmark of the current work is.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum BookmarkAt {
+    At,
+    Parent,
+    /// A name from `dojo new-branch` that does not exist yet.
+    Pending,
 }
 
-/// Prefer a non-protected bookmark.
-fn pick_bookmark(ctx: &Ctx, names: &[String]) -> Option<String> {
-    names
-        .iter()
-        .find(|b| !ctx.is_protected(b))
-        .or_else(|| names.first())
-        .cloned()
+impl BookmarkAt {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::At => "@",
+            Self::Parent => "@-",
+            Self::Pending => "pending",
+        }
+    }
+}
+
+/// The bookmark of the current work, in this order:
+/// 1. a non-protected bookmark on `@`, else on `@-`;
+/// 2. a pending name from `dojo new-branch` for a change in `::@`;
+/// 3. a protected bookmark on `@` or `@-` (`dojo new-branch` starts on
+///    `trunk()`, so `main` is often on `@-`).
+pub fn locate_current_bookmark(ctx: &Ctx) -> Result<Option<(String, BookmarkAt)>> {
+    let mut protected = None;
+    for (rev, at) in [("@", BookmarkAt::At), ("@-", BookmarkAt::Parent)] {
+        let Ok(c) = ctx.change(rev) else { continue };
+        if let Some(b) = c.local_bookmarks.iter().find(|b| !ctx.is_protected(b)) {
+            return Ok(Some((b.clone(), at)));
+        }
+        if protected.is_none() {
+            protected = c.local_bookmarks.first().map(|b| (b.clone(), at));
+        }
+    }
+    if let Some(name) = pending_bookmark(ctx) {
+        return Ok(Some((name, BookmarkAt::Pending)));
+    }
+    Ok(protected)
+}
+
+/// The bookmark of the current work (see [`locate_current_bookmark`]).
+pub fn current_bookmark(ctx: &Ctx) -> Result<Option<String>> {
+    Ok(locate_current_bookmark(ctx)?.map(|(b, _)| b))
+}
+
+/// A pending name from `dojo new-branch` whose change is in `::@`.
+pub fn pending_bookmark(ctx: &Ctx) -> Option<String> {
+    pending::load(&ctx.root)
+        .into_iter()
+        .find(|p| ctx.count(&format!("{} & ::@", p.change_id)) > 0)
+        .map(|p| p.name)
 }
 
 fn report(ctx: &Ctx, runner: &Runner<'_>, start: usize, outcome: PushOutcome) -> PushReport {
@@ -161,7 +195,40 @@ fn quote_revset_str(s: &str) -> String {
 
 pub fn push(ctx: &Ctx, runner: &mut Runner<'_>, opts: &PushOptions) -> Result<PushReport> {
     let start = runner.records.len();
+    let wc_is_target = runner.dry_run
+        && opts.change.as_deref().is_none_or(|r| r == "@")
+        && opts.as_rev.as_deref().is_none_or(|r| r == "@")
+        && push_target(ctx).is_ok_and(|(_, rev)| rev == "@");
     let mut report = push_inner(ctx, runner, opts)?;
+    // The pushed commit must stay as it is: Sundae refuses a rewritten
+    // commit ("forge has commits you lack"). When the working copy is the
+    // pushed commit, start a new empty change on top of it (like
+    // `jj commit`). Do this before the fetch below: that fetch makes the
+    // pushed commit immutable, and jj then creates such a change itself.
+    if matches!(report.outcome, PushOutcome::Pushed) {
+        let pushed_wc = if runner.dry_run {
+            wc_is_target
+        } else {
+            ctx.count(&format!(
+                "@ & remote_bookmarks(remote=exact:{})",
+                quote_revset_str(&ctx.remotes.push)
+            )) > 0
+        };
+        if pushed_wc {
+            let parent = report
+                .bookmark
+                .as_deref()
+                .map_or_else(|| "@".to_string(), bookmarks::symbol);
+            runner.run_ok(Step::jj(
+                &["new", &parent],
+                "start a new change on top, so the pushed commit stays unchanged",
+            ))?;
+            report
+                .message
+                .push_str("\nYour working copy is now a new empty change on top of it.");
+        }
+        report.steps = runner.records[start..].to_vec();
+    }
     // Sundae forwarded the push to the forge; refresh our view of origin so
     // `dojo branches` / `dojo status` show it (best effort).
     if matches!(report.outcome, PushOutcome::Pushed)
@@ -194,18 +261,8 @@ fn push_inner(ctx: &Ctx, runner: &mut Runner<'_>, opts: &PushOptions) -> Result<
 
     // Which bookmark?
     let mut bookmark = opts.bookmark.clone();
-    let mut from_pending = false;
     if bookmark.is_none() {
         bookmark = current_bookmark(ctx)?;
-    }
-    if bookmark.is_none() {
-        for p in pending::load(&ctx.root) {
-            if ctx.count(&format!("{} & ::{}", p.change_id, target.commit_id)) > 0 {
-                bookmark = Some(p.name);
-                from_pending = true;
-                break;
-            }
-        }
     }
 
     // --as <name>: the same change under a new name.
@@ -310,7 +367,7 @@ fn push_inner(ctx: &Ctx, runner: &mut Runner<'_>, opts: &PushOptions) -> Result<
                 ],
                 format!("name your change {name}"),
             ))?;
-            if from_pending && !runner.dry_run {
+            if !runner.dry_run && pending::load(&ctx.root).iter().any(|p| p.name == name) {
                 let _ = pending::remove(&ctx.root, &name);
             }
         }

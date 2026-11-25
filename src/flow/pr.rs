@@ -123,7 +123,8 @@ pub fn pr_step(
 }
 
 /// Title and body from the commits on the bookmark that the forge's main
-/// line does not have.
+/// line does not have. One commit: its description. More commits: the
+/// newest title, and a list of all titles as the body.
 fn title_body(ctx: &Ctx, bookmark: &str) -> (String, String) {
     let sym = crate::jujutsu::bookmarks::symbol(bookmark);
     let commits = changes::changes(&ctx.root, &format!("trunk()..{sym}")).unwrap_or_default();
@@ -136,14 +137,22 @@ fn title_body(ctx: &Ctx, bookmark: &str) -> (String, String) {
             (title, body)
         }
         many => {
-            // jj log order is newest first; list oldest first.
+            // jj log order is newest first. The title is the newest
+            // described commit (it usually names the latest state of the
+            // work); the body lists all commits, oldest first.
+            let title = many
+                .iter()
+                .map(|c| c.title())
+                .find(|t| !t.is_empty())
+                .unwrap_or(bookmark)
+                .to_string();
             let body = many
                 .iter()
                 .rev()
                 .map(|c| format!("- {}", c.title()))
                 .collect::<Vec<_>>()
                 .join("\n");
-            (bookmark.to_string(), body)
+            (title, body)
         }
     }
 }

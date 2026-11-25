@@ -7,8 +7,14 @@ use serde_json::Value;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output, Stdio};
 
-const FIXTURE: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/tests/fixtures/sundae_layout.sh");
-const OUTSIDE_PUSH: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/tests/fixtures/outside_push.sh");
+const FIXTURE: &str = concat!(
+    env!("CARGO_MANIFEST_DIR"),
+    "/tests/fixtures/sundae_layout.sh"
+);
+const OUTSIDE_PUSH: &str = concat!(
+    env!("CARGO_MANIFEST_DIR"),
+    "/tests/fixtures/outside_push.sh"
+);
 
 struct Layout {
     _tmp: tempfile::TempDir,
@@ -43,7 +49,8 @@ impl Layout {
             jj_config,
             _tmp: tmp,
         };
-        let out = layout.env(Command::new("sh"))
+        let out = layout
+            .env(Command::new("sh"))
             .arg(FIXTURE)
             .arg(&layout.root)
             .stdin(Stdio::null())
@@ -248,7 +255,10 @@ fn fetch_reports_new_moved_and_deleted_per_remote() {
     let l = Layout::new();
     let outside = l.root.join("outside");
     // New + soon-deleted branch on the forge, and a moved fix/goals.
-    l.git(&outside, &["push", "-q", "origin", "origin/main:refs/heads/tmp"]);
+    l.git(
+        &outside,
+        &["push", "-q", "origin", "origin/main:refs/heads/tmp"],
+    );
     l.outside_push("fix/goals", "goals.txt", "outside edit");
     let r = l.dojo_json(&["fetch"], 0);
     assert_eq!(
@@ -256,9 +266,17 @@ fn fetch_reports_new_moved_and_deleted_per_remote() {
         vec!["jj git fetch --remote origin --remote sundae"]
     );
     let origin = r["remote_changes"]["origin"].as_array().unwrap();
-    assert!(origin.iter().any(|c| c["name"] == "tmp" && c["kind"] == "new"));
-    assert!(origin.iter().any(|c| c["name"] == "fix/goals" && c["kind"] == "moved"));
-    assert!(r["remote_changes"]["sundae"].as_array().unwrap().is_empty());
+    assert!(
+        origin
+            .iter()
+            .any(|c| c["name"] == "tmp" && c["kind"] == "new")
+    );
+    assert!(
+        origin
+            .iter()
+            .any(|c| c["name"] == "fix/goals" && c["kind"] == "moved")
+    );
+    assert_eq!(r["remote_changes"]["sundae"], serde_json::json!([]));
 
     l.git(&outside, &["push", "-q", "origin", "--delete", "tmp"]);
     let r = l.dojo_json(&["fetch"], 0);
@@ -286,7 +304,9 @@ fn branches_table_shows_remotes_tracking_and_protection() {
 
     let text = l.dojo_ok(&["branches"]);
     let header = text.lines().next().unwrap();
-    for col in ["BOOKMARK", "LOCAL", "@sundae", "@origin", "TRACKED", "±sundae", "±origin"] {
+    for col in [
+        "BOOKMARK", "LOCAL", "@sundae", "@origin", "TRACKED", "±sundae", "±origin",
+    ] {
         assert!(header.contains(col), "missing {col}: {header}");
     }
     assert!(text.contains("protected"), "{text}");
@@ -312,7 +332,13 @@ fn switch_tracks_untracked_remote_bookmark_and_keeps_edits() {
     // @- is fix/goals; the old change still has the edit.
     assert_eq!(l.commit_of("@-"), l.commit_of("fix/goals"));
     let kept_id = kept["change_id"].as_str().unwrap();
-    let diff = l.jj(&["diff", "--ignore-working-copy", "-r", kept_id, "--name-only"]);
+    let diff = l.jj(&[
+        "diff",
+        "--ignore-working-copy",
+        "-r",
+        kept_id,
+        "--name-only",
+    ]);
     assert_eq!(diff, "README.md");
 
     let b = l.dojo_json(&["branches"], 0);
@@ -323,7 +349,7 @@ fn switch_tracks_untracked_remote_bookmark_and_keeps_edits() {
     // A second switch is a no-op.
     let r = l.dojo_json(&["switch", "fix/goals"], 0);
     assert_eq!(r["already_there"], true);
-    assert!(commands(&r).is_empty());
+    assert_eq!(commands(&r), Vec::<String>::new());
 
     // Unknown bookmarks fetch first, then fail with a hint.
     let out = l.dojo(&["switch", "no-such"]);
@@ -336,7 +362,17 @@ fn switch_tracks_untracked_remote_bookmark_and_keeps_edits() {
 fn switch_fetches_a_bookmark_that_is_new_on_the_forge() {
     let l = Layout::new();
     let outside = l.root.join("outside");
-    l.git(&outside, &["push", "-q", "origin", "origin/main:refs/heads/from-forge"]);
+    // Not on main: @ starts on main, and switch skips `jj new` when @ is
+    // already an empty change on the target commit.
+    l.git(
+        &outside,
+        &[
+            "push",
+            "-q",
+            "origin",
+            "origin/fix/goals:refs/heads/from-forge",
+        ],
+    );
     let r = l.dojo_json(&["switch", "from-forge"], 0);
     let cmds = commands(&r);
     assert_eq!(cmds[0], "jj git fetch --remote origin --remote sundae");
@@ -359,9 +395,14 @@ fn push_success_moves_bookmark_and_reaches_sundae_and_forge() {
     );
     assert!(cmds.contains(&"jj bookmark set fix/goals --revision @".to_string()));
     assert!(cmds.contains(&"jj git push --remote sundae --bookmark fix/goals".to_string()));
+    assert!(cmds.contains(&"jj new fix/goals".to_string()), "{cmds:?}");
     let local = l.commit_of("fix/goals");
     assert_eq!(l.bare_head("sundae.git", "fix/goals"), local);
-    assert_eq!(l.bare_head("forge.git", "fix/goals"), local, "Sundae forwards to the forge");
+    assert_eq!(
+        l.bare_head("forge.git", "fix/goals"),
+        local,
+        "Sundae forwards to the forge"
+    );
     // Pushing again is a no-op.
     let r = l.dojo_json(&["push"], 0);
     assert_eq!(r["outcome"], "up-to-date");
@@ -373,8 +414,10 @@ fn push_refused_when_forge_has_commits_then_sync_fixes_it() {
     l.dojo_ok(&["switch", "fix/goals"]);
     l.append("goals.txt", "first");
     l.dojo_ok(&["push", "-m", "first"]);
+    // After the push, @ is a new empty change on top of fix/goals.
+    assert_eq!(l.commit_of("@-"), l.commit_of("fix/goals"));
     l.outside_push("fix/goals", "goals.txt", "outside");
-    l.jj(&["new", "-m", "second"]);
+    l.jj(&["describe", "-m", "second"]);
     l.write("second.txt", "two\n");
 
     let r = l.dojo_json(&["push"], 2);
@@ -387,9 +430,10 @@ fn push_refused_when_forge_has_commits_then_sync_fixes_it() {
     // The follow-up: sync rebases onto the forge's commit, then push works.
     let s = l.dojo_json(&["sync", "fix/goals"], 0);
     assert_eq!(s["outcome"], "rebased");
-    assert!(commands(&s).contains(
-        &"jj rebase --branch fix/goals --destination fix/goals@origin".to_string()
-    ));
+    assert!(
+        commands(&s)
+            .contains(&"jj rebase --branch fix/goals --destination fix/goals@origin".to_string())
+    );
     assert_eq!(s["offer"]["action"]["kind"], "push");
     let forge_before = l.bare_head("forge.git", "fix/goals");
     let p = l.dojo_json(&["push", "fix/goals"], 0);
@@ -414,7 +458,9 @@ fn sync_with_yes_pushes_in_one_command() {
     l.append("goals.txt", "mine");
     l.dojo_ok(&["push", "-m", "mine"]);
     l.outside_push("fix/goals", "goals.txt", "theirs");
-    l.append("goals.txt", "more");
+    // A new edit in the working copy (another file: the same lines in
+    // goals.txt would conflict with "theirs").
+    l.write("more.txt", "more\n");
     let text = l.dojo_ok(&["sync", "fix/goals", "--yes"]);
     assert!(text.contains("jj rebase --branch"), "{text}");
     assert!(text.contains("Pushed fix/goals to sundae"), "{text}");
@@ -459,7 +505,7 @@ fn push_protected_refused_by_server_then_pushed_as_new_bookmark() {
     // --as <name>: same change, chosen name.
     let p = l.dojo_json(&["push", "--as", "fix/main-work"], 0);
     assert_eq!(p["outcome"], "pushed");
-    assert!(!l.bare_head("sundae.git", "fix/main-work").is_empty());
+    assert_ne!(l.bare_head("sundae.git", "fix/main-work"), "");
 }
 
 #[test]
@@ -471,7 +517,12 @@ fn push_refused_for_private_path() {
     assert_eq!(r["refusal"]["kind"], "private-paths", "{r:#}");
     let paths = r["refusal"]["paths"].as_array().unwrap();
     assert_eq!(paths[0]["path"], "todo.txt");
-    assert!(r["message"].as_str().unwrap().contains("must not be committed"));
+    assert!(
+        r["message"]
+            .as_str()
+            .unwrap()
+            .contains("must not be committed")
+    );
     // AGENTS.md is excluded via .git/info/exclude and never committed.
     let files = l.jj(&["file", "list", "--ignore-working-copy"]);
     assert!(!files.contains("AGENTS.md"), "{files}");
@@ -482,8 +533,14 @@ fn new_branch_creates_bookmark_on_first_push() {
     let l = Layout::new();
     let r = l.dojo_json(&["new-branch", "feat/a"], 0);
     assert_eq!(commands(&r), vec!["jj new 'trunk()'"]);
-    let b = l.dojo_json(&["branches"], 0);
-    assert!(b["rows"].as_array().unwrap().iter().all(|r| r["name"] != "feat/a"));
+    let listed = l.dojo_json(&["branches"], 0);
+    assert!(
+        listed["rows"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .all(|r| r["name"] != "feat/a")
+    );
     // status knows the pending name.
     l.write("a.txt", "a\n");
     let s = l.dojo_json(&["status"], 0);
@@ -494,10 +551,19 @@ fn new_branch_creates_bookmark_on_first_push() {
     let p = l.dojo_json(&["push", "-m", "add a"], 0);
     assert_eq!(p["outcome"], "pushed");
     assert!(commands(&p).contains(&"jj bookmark create feat/a --revision @".to_string()));
-    assert!(!l.bare_head("sundae.git", "feat/a").is_empty());
+    assert_ne!(l.bare_head("sundae.git", "feat/a"), "");
 
     // --now creates at once, --from picks the base.
-    let r = l.dojo_json(&["new-branch", "feat/b", "--now", "--from", "fix/goals@origin"], 0);
+    let r = l.dojo_json(
+        &[
+            "new-branch",
+            "feat/b",
+            "--now",
+            "--from",
+            "fix/goals@origin",
+        ],
+        0,
+    );
     assert_eq!(
         commands(&r),
         vec![
@@ -534,13 +600,32 @@ fn status_suggests_next_command() {
 #[test]
 fn dry_run_prints_commands_and_changes_nothing() {
     let l = Layout::new();
-    let before = l.jj(&["op", "log", "--no-graph", "-T", "id ++ \"\\n\"", "--limit", "1"]);
+    let before = l.jj(&[
+        "op",
+        "log",
+        "--no-graph",
+        "-T",
+        "id ++ \"\\n\"",
+        "--limit",
+        "1",
+    ]);
     let out = l.dojo(&["--dry-run", "switch", "fix/goals"]);
     assert!(out.status.success());
     let stdout = String::from_utf8_lossy(&out.stdout);
-    assert!(stdout.contains("jj bookmark track fix/goals --remote sundae"), "{stdout}");
+    assert!(
+        stdout.contains("jj bookmark track fix/goals --remote sundae"),
+        "{stdout}"
+    );
     assert!(stdout.contains("jj new fix/goals"), "{stdout}");
-    let after = l.jj(&["op", "log", "--no-graph", "-T", "id ++ \"\\n\"", "--limit", "1"]);
+    let after = l.jj(&[
+        "op",
+        "log",
+        "--no-graph",
+        "-T",
+        "id ++ \"\\n\"",
+        "--limit",
+        "1",
+    ]);
     assert_eq!(before, after, "dry run must not create operations");
 }
 
@@ -550,7 +635,15 @@ fn pr_dry_run_uses_head_for_gh_and_source_branch_for_glab() {
     l.dojo_ok(&["switch", "fix/goals"]);
     l.append("goals.txt", "pr");
     l.dojo_ok(&["push", "-m", "Fix the goals"]);
-    l.git(&l.work, &["remote", "set-url", "origin", "https://github.com/acme/widgets.git"]);
+    l.git(
+        &l.work,
+        &[
+            "remote",
+            "set-url",
+            "origin",
+            "https://github.com/acme/widgets.git",
+        ],
+    );
     let r = l.dojo_json(&["--dry-run", "pr"], 0);
     let cmds = commands(&r);
     let gh = cmds.iter().find(|c| c.starts_with("gh ")).expect("gh step");
@@ -558,7 +651,10 @@ fn pr_dry_run_uses_head_for_gh_and_source_branch_for_glab() {
         gh.starts_with("gh pr create --repo acme/widgets --head fix/goals --title 'Fix the goals'"),
         "{gh}"
     );
-    l.git(&l.work, &["remote", "set-url", "origin", "git@gitlab.com:grp/proj.git"]);
+    l.git(
+        &l.work,
+        &["remote", "set-url", "origin", "git@gitlab.com:grp/proj.git"],
+    );
     let r = l.dojo_json(&["--dry-run", "pr", "fix/goals", "--checks"], 0);
     assert_eq!(
         commands(&r),
@@ -579,7 +675,14 @@ fn missing_identity_shows_one_fix() {
     let out = l.dojo(&["switch", "fix/goals"]);
     assert!(out.status.success());
     let err = String::from_utf8_lossy(&out.stderr);
-    assert_eq!(err.matches("jj config set --user user.name").count(), 1, "{err}");
+    // dojo prints its hint once (jj's own warning, echoed with the step
+    // output, has the same fix commands).
+    assert_eq!(
+        err.matches("jj does not know your name").count(),
+        1,
+        "{err}"
+    );
+    assert!(err.contains("jj config set --user user.name"), "{err}");
     assert!(err.contains("jj config set --user user.email"), "{err}");
 }
 
@@ -590,11 +693,20 @@ fn without_sundae_remote_dojo_behaves_like_plain_jj() {
     let forge = l.root.join("forge.git");
     l.git(
         &l.work,
-        &["remote", "set-url", "--push", "origin", forge.to_str().unwrap()],
+        &[
+            "remote",
+            "set-url",
+            "--push",
+            "origin",
+            forge.to_str().unwrap(),
+        ],
     );
     l.dojo_ok(&["switch", "fix/goals"]);
     l.append("goals.txt", "plain");
     let r = l.dojo_json(&["push", "-m", "plain"], 0);
     assert!(commands(&r).contains(&"jj git push --remote origin --bookmark fix/goals".to_string()));
-    assert_eq!(l.bare_head("forge.git", "fix/goals"), l.commit_of("fix/goals"));
+    assert_eq!(
+        l.bare_head("forge.git", "fix/goals"),
+        l.commit_of("fix/goals")
+    );
 }

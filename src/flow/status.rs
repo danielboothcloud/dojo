@@ -4,7 +4,7 @@ use anyhow::Result;
 use serde::Serialize;
 
 use super::identity::Identity;
-use super::{Ctx, pending, push};
+use super::{Ctx, push};
 use crate::jujutsu::bookmarks::BookmarkRow;
 use crate::jujutsu::changes::{self, ChangeInfo};
 
@@ -47,7 +47,7 @@ pub fn status(ctx: &Ctx) -> Result<StatusReport> {
     };
     let rows = ctx.bookmark_rows()?;
 
-    let (bookmark, bookmark_at) = locate_bookmark(ctx, &at, parent.as_ref())?;
+    let (bookmark, bookmark_at) = locate_bookmark(ctx)?;
     let row = bookmark
         .as_deref()
         .and_then(|b| rows.iter().find(|r| r.name == b));
@@ -81,26 +81,9 @@ pub fn status(ctx: &Ctx) -> Result<StatusReport> {
     Ok(report)
 }
 
-fn locate_bookmark(
-    ctx: &Ctx,
-    at: &ChangeInfo,
-    parent: Option<&ChangeInfo>,
-) -> Result<(Option<String>, Option<String>)> {
-    if let Some(b) = push::current_bookmark(ctx)? {
-        let where_ = if at.local_bookmarks.contains(&b) {
-            "@"
-        } else {
-            "@-"
-        };
-        return Ok((Some(b), Some(where_.to_string())));
-    }
-    let head = parent.map_or(at.commit_id.as_str(), |p| p.commit_id.as_str());
-    for p in pending::load(&ctx.root) {
-        if ctx.count(&format!("{} & ::{head}", p.change_id)) > 0
-            || ctx.count(&format!("{} & ::@", p.change_id)) > 0
-        {
-            return Ok((Some(p.name), Some("pending".to_string())));
-        }
+fn locate_bookmark(ctx: &Ctx) -> Result<(Option<String>, Option<String>)> {
+    if let Some((b, where_)) = push::locate_current_bookmark(ctx)? {
+        return Ok((Some(b), Some(where_.as_str().to_string())));
     }
     let below = changes::changes(&ctx.root, "heads(::@ & bookmarks())").unwrap_or_default();
     if let Some(c) = below.into_iter().find(|c| !c.local_bookmarks.is_empty()) {
