@@ -1,0 +1,16 @@
+ dojo  dojo  @ rtssmotx on fix/goals  push → sunda
+╭ Log ───────────────────────────────────────────╮
+│ @  rtssmotx test@example.com 2026-11-25 15:00 3│
+│ │  (empty) (no description set)                │
+│▶○  qsspzlzn forge@example.com 2026-11-25 14:00 │
+│ │  fix goals                                   │
+│ ◆  npppruzt forge@example.com 2026-11-25 13:00 │
+│ │  add goals                                   │
+│ ~                                              │
+│                                                │
+│                                                │
+│                                                │
+│                                                │
+╰────────────────────────────────────────────────╯
+
+ ? help  Tab pane  Enter detail  f fetch

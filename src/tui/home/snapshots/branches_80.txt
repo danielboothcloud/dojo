@@ -1,0 +1,16 @@
+ dojo  dojo  @ rtssmotx on fix/goals  push → sundae
+╭ Bookmarks · Tab: log ────────────────────────────────────────────────────────╮
+│  BOOKMARK   LOCAL    @sundae @origin NOTES                                   │
+│▶ fix/goals  qsspzlzn =       +1                                              │
+│  main       npppruzt =       =       protected                               │
+│  from-forge -        -       zzwwkk… remote only                             │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+╰──────────────────────────────────────────────────────────────────────────────╯
+
+ ? help  Tab pane  Enter detail  f fetch  s switch  p push  y sync  P pr

@@ -1,0 +1,20 @@
+ dojo  dojo  @ rtssmotx on fix/goals  push → sundae
+╭ Bookmarks · Tab: log ────────────────────────────────────────────────────────╮
+│  BOOKMARK   LOCAL    @sundae @origin NOTES                                   │
+│▶╭ Sync fix/goals with the forge ───────────────────────────────────────────╮ │
+│ │dojo runs:                                                                │ │
+│ │$ jj git fetch --remote origin --remote sundae                            │ │
+│ │    get new commits from the remotes                                      │ │
+│ │$ jj rebase --branch fix/goals --destination fix/goals@origin             │ │
+│ │    put your commits on top of the forge's commits                        │ │
+│ │                                                                          │ │
+│ │dojo can run more commands after the fetch.                               │ │
+│ │                                                                          │ │
+│ │CLI: dojo sync fix/goals                                                  │ │
+│ │                                                                          │ │
+│ │Enter run   Esc cancel                                                    │ │
+│ ╰──────────────────────────────────────────────────────────────────────────╯ │
+│                                                                              │
+╰──────────────────────────────────────────────────────────────────────────────╯
+
+ Enter run  Esc cancel

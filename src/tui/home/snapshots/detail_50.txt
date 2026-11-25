@@ -1,0 +1,24 @@
+ dojo  dojo  @ rtssmotx on fix/goals  push → sunda
+╭ Change qsspzlzn fix goals ─────────────────────╮
+│Change    qsspzlznyywr   commit 72fc598a61f3    │
+│Author    Forge <forge@example.com>  2026-11-25 │
+│Bookmarks fix/goals, fix/goals@origin           │
+│                                                │
+│    fix goals                                   │
+│                                                │
+│    Ship dojo this week.                        │
+│                                                │
+│Files (1)  +1 -1                                │
+│  M goals.txt                                   │
+│                                                │
+│diff --git a/goals.txt b/goals.txt              │
+│index 1111111..2222222 100644                   │
+│--- a/goals.txt                                 │
+│+++ b/goals.txt                                 │
+│@@ -1,1 +1,1 @@                                 │
+│-goals: none                                    │
+│+goals: ship dojo                               │
+│                                                │
+╰────────────────────────────────────────────────╯
+
+ Esc back  ↑↓ scroll  d describe  n new  e edit
