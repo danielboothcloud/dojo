@@ -7,8 +7,10 @@ use clap::Parser;
 use std::io::IsTerminal;
 use std::path::{Path, PathBuf};
 
-use dojo::cli::{Cli, Commands, ConfigCommands, ShellCommands};
-use dojo::{commands, config, jujutsu, operations, shell, subprocess_log, text_utils, tui};
+use dojo::cli::{Cli, Commands, ConfigCommands, ShellCommands, WsCommands};
+use dojo::{
+    cli_run, commands, config, flow, jujutsu, operations, shell, subprocess_log, text_utils, tui,
+};
 
 fn main() -> anyhow::Result<()> {
     // Dynamic shell completion. Capture the shell name before `try_complete`
@@ -26,23 +28,168 @@ fn main() -> anyhow::Result<()> {
     }
 
     let cli = Cli::parse();
+    let opts = cli_run::Opts {
+        json: cli.json,
+        dry_run: cli.dry_run,
+        yes: cli.yes,
+    };
 
     if let Ok(root) = jujutsu::current_workspace_root() {
         subprocess_log::init(&root);
     }
 
     let result = match cli.command {
-        None => tui::run(),
+        None => tui::home::run(),
 
-        Some(Commands::Switch { target }) => tui::switch(&target),
+        Some(Commands::Ws { command }) => run_ws(command),
 
-        Some(Commands::New {
+        Some(Commands::Fetch) => cli_run::fetch(&opts),
+        Some(Commands::Branches) => cli_run::branches(&opts),
+        Some(Commands::Switch { bookmark }) => cli_run::switch(&opts, &bookmark),
+        Some(Commands::Push {
+            bookmark,
+            change,
+            as_name,
+            message,
+        }) => cli_run::push(
+            &opts,
+            flow::push::PushOptions {
+                bookmark,
+                change,
+                as_name,
+                message,
+                as_rev: None,
+                auto_describe: false,
+            },
+        ),
+        Some(Commands::Sync { bookmark }) => cli_run::sync(&opts, bookmark),
+        Some(Commands::NewBranch {
+            name,
+            from,
+            now,
+            message,
+        }) => cli_run::new_branch(
+            &opts,
+            flow::new_branch::NewBranchOptions {
+                name,
+                from,
+                now,
+                message,
+            },
+        ),
+        Some(Commands::Status) => cli_run::status(&opts),
+        Some(Commands::Pr {
+            bookmark,
+            title,
+            body,
+            base,
+            draft,
+            checks,
+        }) => cli_run::pr(
+            &opts,
+            flow::pr::PrOptions {
+                bookmark,
+                title,
+                body,
+                base,
+                draft,
+                checks,
+            },
+        ),
+
+        Some(Commands::Init) => cmd_init(),
+        Some(Commands::Hook) => {
+            eprintln!("(dojo)::hook not yet implemented");
+            Ok(())
+        }
+        Some(Commands::Config { command }) => match command {
+            // `dojo config init` is an alias of `dojo init`; route through the
+            // same handler so behavior can't diverge.
+            ConfigCommands::Init => cmd_init(),
+            ConfigCommands::Shell {
+                command: ShellCommands::Init { shell: sh },
+            } => {
+                let sh = sh.map_or_else(shell::detect_shell, Ok)?;
+                shell::print_init(&sh)
+            }
+            ConfigCommands::Shell {
+                command:
+                    ShellCommands::Install {
+                        shell: sh,
+                        all,
+                        dry_run,
+                        force,
+                        yes,
+                    },
+            } => {
+                let env = shell::ShellEnv::from_process_env()?;
+                // Interactivity is decided at the CLI boundary: prompt only on a TTY and
+                // when --yes wasn't passed. The library install() stays non-interactive.
+                let interactive = !yes && std::io::stdin().is_terminal();
+                let opts = shell::InstallOpts {
+                    dry_run,
+                    force,
+                    interactive,
+                };
+                if all {
+                    shell::install_all(&env, opts)
+                } else {
+                    let sh = sh.map_or_else(shell::detect_shell, Ok)?;
+                    shell::install(&env, &sh, opts)
+                }
+            }
+            ConfigCommands::Shell {
+                command:
+                    ShellCommands::Uninstall {
+                        shell: sh,
+                        dry_run,
+                        force,
+                    },
+            } => {
+                let sh = sh.map_or_else(shell::detect_shell, Ok)?;
+                let env = shell::ShellEnv::from_process_env()?;
+                let opts = shell::UninstallOpts { dry_run, force };
+                shell::uninstall(&env, &sh, opts)
+            }
+            ConfigCommands::Shell {
+                command: ShellCommands::Status { shell: sh },
+            } => {
+                let env = shell::ShellEnv::from_process_env()?;
+                shell::status(&env, sh.as_deref())
+            }
+        },
+    };
+
+    if let Err(ref e) = result {
+        if jujutsu::is_stale_error(e) {
+            eprintln!(
+                "(dojo)::stale working copy is stale — another tool modified the repo.\n\
+                 Fix with: jj workspace update-stale"
+            );
+            std::process::exit(1);
+        }
+        if shell::is_cd_not_applied(e) {
+            // The reason-aware note / rescue escape was already printed; exit non-zero
+            // quietly (no anyhow `Error:` dump).
+            std::process::exit(1);
+        }
+    }
+    result
+}
+
+/// `dojo ws ...`: the original ji workspace commands.
+fn run_ws(command: WsCommands) -> anyhow::Result<()> {
+    match command {
+        WsCommands::Tui => tui::run(),
+        WsCommands::Switch { target } => tui::switch(&target),
+
+        WsCommands::New {
             bookmark,
             revision,
             path,
             message,
             create_if_necessary,
-        }) => {
+        } => {
             if create_if_necessary {
                 tui::create_or_switch(
                     &bookmark,
@@ -60,12 +207,12 @@ fn main() -> anyhow::Result<()> {
             }
         }
 
-        Some(Commands::Close {
+        WsCommands::Close {
             target,
             source,
             method,
             delete_files,
-        }) => {
+        } => {
             // Validate: target required for non-disposal methods.
             let needs_target = !matches!(
                 method,
@@ -173,11 +320,11 @@ fn main() -> anyhow::Result<()> {
             Ok(())
         }
 
-        Some(Commands::Transfer {
+        WsCommands::Transfer {
             target,
             source,
             method,
-        }) => {
+        } => {
             let repo_root = jujutsu::workspace_root()?;
             let cfg = config::load_config(&repo_root)?;
             let repo_name = config::resolve_repo_name(&cfg, &repo_root);
@@ -225,7 +372,7 @@ fn main() -> anyhow::Result<()> {
             Ok(())
         }
 
-        Some(Commands::Sync { target, source }) => {
+        WsCommands::Sync { target, source } => {
             let repo_root = jujutsu::workspace_root()?;
             let cfg = config::load_config(&repo_root)?;
             let repo_name = config::resolve_repo_name(&cfg, &repo_root);
@@ -269,85 +416,8 @@ fn main() -> anyhow::Result<()> {
             Ok(())
         }
 
-        Some(Commands::Ls) => cmd_ls(),
-        Some(Commands::Init) => cmd_init(),
-        Some(Commands::Hook) => {
-            eprintln!("(dojo)::hook not yet implemented");
-            Ok(())
-        }
-        Some(Commands::Config { command }) => match command {
-            // `dojo config init` is an alias of `dojo init`; route through the
-            // same handler so behavior can't diverge.
-            ConfigCommands::Init => cmd_init(),
-            ConfigCommands::Shell {
-                command: ShellCommands::Init { shell: sh },
-            } => {
-                let sh = sh.map_or_else(shell::detect_shell, Ok)?;
-                shell::print_init(&sh)
-            }
-            ConfigCommands::Shell {
-                command:
-                    ShellCommands::Install {
-                        shell: sh,
-                        all,
-                        dry_run,
-                        force,
-                        yes,
-                    },
-            } => {
-                let env = shell::ShellEnv::from_process_env()?;
-                // Interactivity is decided at the CLI boundary: prompt only on a TTY and
-                // when --yes wasn't passed. The library install() stays non-interactive.
-                let interactive = !yes && std::io::stdin().is_terminal();
-                let opts = shell::InstallOpts {
-                    dry_run,
-                    force,
-                    interactive,
-                };
-                if all {
-                    shell::install_all(&env, opts)
-                } else {
-                    let sh = sh.map_or_else(shell::detect_shell, Ok)?;
-                    shell::install(&env, &sh, opts)
-                }
-            }
-            ConfigCommands::Shell {
-                command:
-                    ShellCommands::Uninstall {
-                        shell: sh,
-                        dry_run,
-                        force,
-                    },
-            } => {
-                let sh = sh.map_or_else(shell::detect_shell, Ok)?;
-                let env = shell::ShellEnv::from_process_env()?;
-                let opts = shell::UninstallOpts { dry_run, force };
-                shell::uninstall(&env, &sh, opts)
-            }
-            ConfigCommands::Shell {
-                command: ShellCommands::Status { shell: sh },
-            } => {
-                let env = shell::ShellEnv::from_process_env()?;
-                shell::status(&env, sh.as_deref())
-            }
-        },
-    };
-
-    if let Err(ref e) = result {
-        if jujutsu::is_stale_error(e) {
-            eprintln!(
-                "(dojo)::stale working copy is stale — another tool modified the repo.\n\
-                 Fix with: jj workspace update-stale"
-            );
-            std::process::exit(1);
-        }
-        if shell::is_cd_not_applied(e) {
-            // The reason-aware note / rescue escape was already printed; exit non-zero
-            // quietly (no anyhow `Error:` dump).
-            std::process::exit(1);
-        }
+        WsCommands::Ls => cmd_ls(),
     }
-    result
 }
 
 /// Resolve source and target workspace names/paths from CLI arguments.

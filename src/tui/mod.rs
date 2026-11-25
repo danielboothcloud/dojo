@@ -1,4 +1,5 @@
 mod bookmarks_dialog;
+pub mod home;
 mod cmd_spans;
 mod copy_dialog;
 mod create_dialog;

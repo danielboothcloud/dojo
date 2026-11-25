@@ -1,9 +1,11 @@
 pub mod action_history;
 pub mod cli;
+pub mod cli_run;
 pub mod commands;
 pub mod completion;
 pub mod config;
 pub mod finder_xattrs;
+pub mod flow;
 pub mod graph;
 pub mod hooks;
 pub mod jj_utils;

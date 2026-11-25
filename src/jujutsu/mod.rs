@@ -1,3 +1,7 @@
+pub mod bookmarks;
+pub mod changes;
+pub mod remotes;
+
 use crate::hooks::HookVars;
 use anyhow::{Context, Result};
 use std::collections::{HashMap, HashSet};
@@ -166,10 +170,14 @@ pub(crate) fn records(output: &str) -> impl Iterator<Item = &str> {
 //     see pending source files);
 //     `operations.rs` create step-source, `merge`, `merge_squash`,
 //     `merge_abandon_parents_old` target snapshots (bucket 8).
+//     `flow::Ctx::load_at` entry snapshot of the current workspace
+//     (bucket 2 — dojo plans push/switch/status on the edits on disk).
 //   - `run_jj_ws_live`: `jj_utils` head movers + safety checks (buckets
 //     5, 7).
 //   - `jj_cmd_wc` (repo-live): `op_restore`, `create_workspace`,
-//     `split_revision`, `update_stale`, `is_working_copy_stale`.
+//     `split_revision`, `update_stale`, `is_working_copy_stale`,
+//     `run_jj_step` / `run_jj_step_interactive` (bucket 7: the dojo
+//     plan steps the user sees, run exactly as typed).
 //   - `jj_cmd_ws_wc` (workspace-live): `snapshot_ws`,
 //     `has_unsnapshotted_changes` preview, `run_jj_ws_live`, `new_merge`,
 //     `is_workspace_stale`, `update_workspace_stale`.
@@ -232,6 +240,74 @@ fn jj_cmd_bootstrap() -> Command {
 /// Run a jj command with `--ignore-working-copy` (default policy).
 pub(crate) fn run_jj(repo: &Path, args: &[&str]) -> Result<String> {
     run_jj_inner(jj_cmd(repo), args)
+}
+
+/// Global flags for every parsed read: no colour codes, no pager.
+const QUERY_FLAGS: [&str; 2] = ["--color=never", "--no-pager"];
+
+/// Read recorded state for parsing (bucket 1): `--ignore-working-copy`,
+/// `--color=never`, `--no-pager`. Callers parse only template output.
+pub(crate) fn run_jj_query(repo: &Path, args: &[&str]) -> Result<String> {
+    let mut full: Vec<&str> = QUERY_FLAGS.to_vec();
+    full.extend_from_slice(args);
+    run_jj_inner(jj_cmd(repo), &full)
+}
+
+/// Captured result of one user-visible jj step.
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct StepOutput {
+    pub success: bool,
+    pub stdout: String,
+    pub stderr: String,
+}
+
+/// Run one user-visible write step (a `dojo` plan step) live in the
+/// workspace at `repo` (bucket 7: the command itself snapshots and updates
+/// the working copy, exactly as when the user types it). A non-zero exit is
+/// NOT an error here: the caller inspects `stderr` (for example to explain
+/// a Sundae push refusal).
+pub fn run_jj_step(repo: &Path, args: &[String]) -> Result<StepOutput> {
+    check_min_jj_version_once()?;
+    let mut cmd = jj_cmd_wc(repo);
+    cmd.args(QUERY_FLAGS).args(args).stdin(Stdio::null());
+    let start = Instant::now();
+    let output = cmd.output().map_err(|e| {
+        let refs: Vec<&str> = args.iter().map(String::as_str).collect();
+        classify_jj_spawn_failure(e, &refs)
+    })?;
+    crate::subprocess_log::log_subprocess(&args.join(" "), start.elapsed());
+    Ok(StepOutput {
+        success: output.status.success(),
+        stdout: String::from_utf8_lossy(&output.stdout).into_owned(),
+        stderr: String::from_utf8_lossy(&output.stderr).into_owned(),
+    })
+}
+
+/// Run one user-visible step that needs the terminal (an editor or the
+/// diff editor, for example `jj split` or `jj describe` without `-m`).
+/// stdio is inherited; only the exit status comes back.
+pub fn run_jj_step_interactive(repo: &Path, args: &[String]) -> Result<bool> {
+    check_min_jj_version_once()?;
+    let mut cmd = jj_cmd_wc(repo);
+    cmd.arg("--no-pager").args(args);
+    let status = cmd.status().map_err(|e| {
+        let refs: Vec<&str> = args.iter().map(String::as_str).collect();
+        classify_jj_spawn_failure(e, &refs)
+    })?;
+    Ok(status.success())
+}
+
+/// Render a jj argument vector as the shell line the user would type
+/// (`jj ...`, with POSIX quoting where needed). Display only: dojo never
+/// passes this string to a shell.
+pub fn display_command(args: &[String]) -> String {
+    let refs: Vec<&str> = args.iter().map(String::as_str).collect();
+    format_jj_command(&refs)
+}
+
+/// POSIX-quote one word for display (same rules as [`display_command`]).
+pub fn quote_word(word: &str) -> String {
+    shell_quote_word(word)
 }
 
 /// Snapshot the working copy of a specific workspace (captures pending edits).
@@ -1024,6 +1100,7 @@ pub fn completion_local_bookmarks() -> Result<Vec<(String, Option<i64>)>> {
     const TEMPLATE: &str = concat!(
         r#"committer.timestamp().format("%s") ++ "\x1f""#,
         r#" ++ local_bookmarks.map(|b| b.name()).join("\x01")"#,
+        r#" ++ "\x01" ++ remote_bookmarks.map(|b| b.name()).join("\x01")"#,
         r#" ++ "\x1e""#,
     );
     let stdout = run_jj_bootstrap_timeout(
@@ -1033,7 +1110,7 @@ pub fn completion_local_bookmarks() -> Result<Vec<(String, Option<i64>)>> {
             "log",
             "--no-graph",
             "--revision",
-            "bookmarks()",
+            "bookmarks() | remote_bookmarks()",
             "--template",
             TEMPLATE,
         ],
@@ -2332,10 +2409,10 @@ mod tests {
         let cmd_pat = format!("{}({:?})", "Command::new", "jj");
         for (path, content) in &files {
             let n = count_in_code(content, &cmd_pat);
-            if path.ends_with("jujutsu.rs") {
+            if path.ends_with("jujutsu/mod.rs") {
                 assert_eq!(
                     n, 6,
-                    "expected exactly 6 jj Command constructions in jujutsu.rs \
+                    "expected exactly 6 jj Command constructions in jujutsu/mod.rs \
                      (5 builders + version detection), found {n}"
                 );
             } else {
@@ -2352,9 +2429,9 @@ mod tests {
         // (b) Live/snapshot wrapper tripwire. Function names only — the `(`
         // is appended at runtime so the table doesn't count itself.
         let expected: &[(&str, usize)] = &[
-            ("snapshot_ws", 10),
+            ("snapshot_ws", 11),
             ("run_jj_ws_live", 6),
-            ("jj_cmd_wc", 6),
+            ("jj_cmd_wc", 8),
             ("jj_cmd_ws_wc", 7),
             ("is_workspace_stale", 5),
             ("stale_workspace_names", 3),
@@ -2375,7 +2452,7 @@ mod tests {
                 got, *want,
                 "census drift for `{pat}`: expected {want} mentions, found {got}. \
                  Classify the new/removed site in the snapshot-policy census \
-                 (src/jujutsu.rs) and update this table."
+                 (src/jujutsu/mod.rs) and update this table."
             );
         }
     }

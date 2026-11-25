@@ -1,5 +1,20 @@
 # dojo project configuration
-# Location: .config/dojo.toml (check into version control)
+# Location: .config/dojo.toml (check into version control).
+# User-wide settings: $XDG_CONFIG_HOME/dojo/config.toml (same keys; this
+# project file wins).
+#
+# Remotes and protected bookmarks
+# dojo reads the git remotes itself and passes explicit --remote flags; it
+# never depends on jj's git.push / git.fetch settings.
+# - push-remote: default "sundae" if it exists, else "origin".
+# - upstream-remote: the forge that `dojo sync` rebases onto; default
+#   "origin" if it exists, else the push remote.
+# - protected: bookmarks the server refuses; dojo offers a new bookmark.
+#
+# protected = ["main"]
+# push-remote = "sundae"
+# upstream-remote = "origin"
+#
 #
 # ============================================================================
 # Template variables

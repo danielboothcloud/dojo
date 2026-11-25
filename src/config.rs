@@ -1,7 +1,7 @@
 use anyhow::{Context, Result};
 use serde::Deserialize;
 use std::collections::BTreeMap;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use crate::hooks::{self, TemplateWarning};
 
@@ -25,8 +25,21 @@ pub struct Config {
     #[serde(rename = "log-template", default)]
     pub log_template: Option<String>,
     /// Override the author on every revision created by dojo via `jj metaedit --author`.
-    #[serde(rename = "dojo-author", default)]
+    /// `ji-author` is accepted for configs written for upstream `ji`.
+    #[serde(rename = "dojo-author", alias = "ji-author", default)]
     pub dojo_author: Option<String>,
+    /// Bookmarks the push remote refuses (Sundae protects `main` by default).
+    /// dojo never moves or pushes these; it offers a new bookmark instead.
+    #[serde(default = "default_protected")]
+    pub protected: Vec<String>,
+    /// Remote that `dojo push` pushes to. Default: `sundae` if it exists,
+    /// else `origin`, else the only remote.
+    #[serde(rename = "push-remote", default)]
+    pub push_remote: Option<String>,
+    /// Forge remote that `dojo sync` rebases onto. Default: `origin` if it
+    /// exists, else the push remote.
+    #[serde(rename = "upstream-remote", default)]
+    pub upstream_remote: Option<String>,
     /// Restore Finder-relevant xattrs (macOS alias flag, resource fork) after
     /// operations that materialize working-copy files. Gates the xattr writes
     /// only — the fidelity warnings are always emitted.
@@ -48,6 +61,10 @@ fn default_preserve_finder_xattrs() -> bool {
     true
 }
 
+fn default_protected() -> Vec<String> {
+    vec!["main".to_string()]
+}
+
 impl Default for Config {
     fn default() -> Self {
         Self {
@@ -58,6 +75,9 @@ impl Default for Config {
             templates: BTreeMap::new(),
             log_template: None,
             dojo_author: None,
+            protected: default_protected(),
+            push_remote: None,
+            upstream_remote: None,
             preserve_finder_xattrs: default_preserve_finder_xattrs(),
             warnings: Vec::new(),
         }
@@ -79,13 +99,68 @@ pub fn resolve_repo_name(config: &Config, repo_root: &Path) -> String {
         .unwrap_or_default()
 }
 
+/// Project config path inside a workspace root.
+pub const PROJECT_CONFIG: &str = ".config/dojo.toml";
+
+/// User config path: `$XDG_CONFIG_HOME/dojo/config.toml`, falling back to
+/// `$HOME/.config/dojo/config.toml` (on macOS too, like jj's XDG support).
+pub fn user_config_path() -> Option<PathBuf> {
+    let base = std::env::var_os("XDG_CONFIG_HOME")
+        .filter(|v| !v.is_empty())
+        .map(PathBuf::from)
+        .or_else(|| {
+            std::env::var_os("HOME")
+                .filter(|v| !v.is_empty())
+                .map(|h| PathBuf::from(h).join(".config"))
+        })?;
+    Some(base.join("dojo").join("config.toml"))
+}
+
+/// Merge `overlay` into `base`: tables merge key by key, other values
+/// replace.
+fn merge_toml(base: &mut toml::Table, overlay: toml::Table) {
+    for (key, value) in overlay {
+        match (base.get_mut(&key), value) {
+            (Some(toml::Value::Table(b)), toml::Value::Table(o)) => merge_toml(b, o),
+            (_, v) => {
+                base.insert(key, v);
+            }
+        }
+    }
+}
+
+fn read_table(path: &Path) -> Result<Option<toml::Table>> {
+    if !path.exists() {
+        return Ok(None);
+    }
+    let contents = std::fs::read_to_string(path)
+        .with_context(|| format!("failed to read {}", path.display()))?;
+    let table: toml::Table = toml::from_str(&contents)
+        .with_context(|| format!("invalid TOML in {}", path.display()))?;
+    Ok(Some(table))
+}
+
+/// Load the user config, then the project config on top of it.
 pub fn load_config(repo_root: &Path) -> Result<Config> {
-    let config_path = repo_root.join(".config/dojo.toml");
-    if !config_path.exists() {
+    load_config_from(user_config_path().as_deref(), repo_root)
+}
+
+pub fn load_config_from(user_path: Option<&Path>, repo_root: &Path) -> Result<Config> {
+    let mut table = toml::Table::new();
+    if let Some(user) = user_path
+        && let Some(t) = read_table(user)?
+    {
+        merge_toml(&mut table, t);
+    }
+    if let Some(t) = read_table(&repo_root.join(PROJECT_CONFIG))? {
+        merge_toml(&mut table, t);
+    }
+    if table.is_empty() {
         return Ok(Config::default());
     }
-    let contents = std::fs::read_to_string(&config_path)?;
-    let mut config: Config = toml::from_str(&contents)?;
+    let mut config: Config = toml::Value::Table(table)
+        .try_into()
+        .context("invalid dojo config")?;
 
     // Validate all template strings for unrecognized or malformed variables.
     let mut warnings = Vec::new();
