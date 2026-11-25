@@ -1,5 +1,5 @@
  dojo  dojo  @ rtssmotx on fix/goals  push → sunda
-╭ Bookmarks · Tab: log ──────────────────────────╮
+╭ Bookmarks · Tab: log · Enter: open ────────────╮
 │  BOOKMARK   LOCAL    @sundae @origin NOTES     │
 │▶ fix/goals  qsspzlzn =       +1                │
 │  main       npppruzt =       =       protected │
@@ -13,4 +13,4 @@
 │                                                │
 ╰────────────────────────────────────────────────╯
 
- ? help  Tab pane  Enter detail  f fetch
+ ? help  Tab pane  Enter open  f fetch  s switch

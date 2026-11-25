@@ -1,5 +1,5 @@
  dojo  dojo  @ rtssmotx on fix/goals  push → sundae
-╭ Log ─────────────────────────────────────────────────────────────────────────╮
+╭ Log · Tab: bookmarks ────────────────────────────────────────────────────────╮
 │ @  rtssmotx test@example.com 2026-11-25 15:00 3d015f14                       │
 │ │  (empty) (no description set)                                              │
 │▶○  qsspzlzn forge@example.com 2026-11-25 14:00 fix/goals 72fc598a            │
@@ -13,4 +13,4 @@
 │                                                                              │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 
- ? help  Tab pane  Enter detail  f fetch  s switch  p push  y sync  P pr
+ ? help  Tab pane  Enter open  f fetch  s switch  p push  y sync  P pr

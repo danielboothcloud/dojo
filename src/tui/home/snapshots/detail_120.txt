@@ -1,0 +1,24 @@
+ dojo  dojo  @ rtssmotx on fix/goals  push → sundae
+╭ Change qsspzlzn ─────────────────────────────────────────────────────────────────────────────────────────────────────╮
+│fix goals                                                                                                             │
+│qsspzlznyywr  commit 72fc598a61f3  Forge <forge@example.com>  2026-11-25 14:00                                        │
+│… 3 more lines (v: show all)                                                                                          │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
+╭ Files (3) +3 -2 ─────────╮╭ M goals.txt  +2 -1 ──────────────────────────────────────────────────────────────────────╮
+│▶M  goals.txt        +2 -1││    ⋯ │@@ -1 +1 @@ goals                                                                  │
+│ A  src/new.rs       +1 -0││ 1  1 │ # Goals                                                                           │
+│ D  old.txt          +0 -1││ 2    │-goals: none                                                                       │
+│                          ││    2 │+goals: ship dojo                                                                  │
+│                          ││ 3  3 │ owner: team                                                                       │
+│                          ││      │                                                                                   │
+│                          ││    ⋯ │@@ -20 +20 @@ notes                                                                │
+│                          ││20 20 │ keep                                                                              │
+│                          ││   21 │+added line                                                                        │
+│                          ││21 22 │ end                                                                               │
+│                          ││                                                                                          │
+│                          ││                                                                                          │
+│                          ││                                                                                          │
+│                          ││                                                                                          │
+╰──────────────────────────╯╰──────────────────────────────────────────────────────────────────────────────────────────╯
+
+ Esc back  Tab files/diff  J K file  ] [ hunk  Space page  ← → scroll  d describe  e edit  ? help

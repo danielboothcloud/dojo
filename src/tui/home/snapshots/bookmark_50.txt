@@ -1,0 +1,18 @@
+ dojo  dojo  @ rtssmotx on fix/goals  push → sunda
+╭ Bookmark ──────────────────────────────────────╮
+│fix/goals  local qsspzlzn                       │
+│@sundae  same as local                          │
+│@origin  1 local commit not on origin (not track│
+╰────────────────────────────────────────────────╯
+╭ Changes on fix/goals ──────────────────────────╮
+│ @  rtssmotx test@example.com 2026-11-25 15:00 3│
+│ │  (empty) (no description set)                │
+│▶○  qsspzlzn forge@example.com 2026-11-25 14:00 │
+│ │  fix goals                                   │
+│ ◆  npppruzt forge@example.com 2026-11-25 13:00 │
+│ │  add goals                                   │
+│ ~                                              │
+│                                                │
+╰────────────────────────────────────────────────╯
+
+ Esc back  Enter change  s switch  p push  y sync

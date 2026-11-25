@@ -91,8 +91,9 @@ Global flags: `--json` (a JSON report with every step, for agents and scripts), 
 
 `dojo` with no command opens the home view:
 
-- the **bookmarks** (local and per remote) and the **log** graph, side by side on a wide terminal, one at a time (`Tab`) on a narrow one;
-- `Enter` shows the **change detail**: description, files, and the coloured diff;
+- the **log** graph (left) and the **bookmarks** (right, local and per remote), side by side on a wide terminal, one at a time (`Tab`) on a narrow one;
+- `Enter` on a bookmark opens the **bookmark view**: its state on each remote and the log of its changes;
+- `Enter` on a change opens the **change detail**: the description, the changed files, and the diff of each file with line numbers and the changed words marked (`J`/`K` file, `]`/`[` hunk);
 - one key per action: `f` fetch, `s` switch, `p` push, `y` sync, `P` pull request, `d` describe, `n` new, `e` edit, `S` squash, `a` abandon, `x` split, `u` undo, `o` operation log, `w` workspaces, `?` help.
 
 Each action first shows a **preview** of the exact commands; `Enter` runs them. When dojo has a follow-up (for example "sync, then push" after a refused push), the result box shows it, and `Enter` runs it. Full reference: [docs/tui.md](docs/tui.md).

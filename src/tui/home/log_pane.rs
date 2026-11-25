@@ -94,9 +94,9 @@ impl LogPane {
         Some((start, start + len))
     }
 
-    pub(crate) fn draw(&mut self, frame: &mut Frame, area: Rect, focused: bool) {
+    pub(crate) fn draw(&mut self, frame: &mut Frame, area: Rect, focused: bool, title: &str) {
         let block = Block::bordered()
-            .title(" Log ")
+            .title(title.to_string())
             .border_type(BorderType::Rounded)
             .border_style(super::view::border_style(focused));
         let inner = block.inner(area);

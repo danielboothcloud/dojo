@@ -12,11 +12,46 @@ Start both from any directory inside a [jj](https://jj-vcs.github.io) repository
 ### Layout
 
 - A header line: the repo name, the working-copy change (`@`), the current bookmark, and the push remote.
-- The **bookmarks pane**: one row per bookmark. The columns are the local change, one column per remote (`@sundae`, `@origin`), and notes. A remote column shows ahead/behind against the local bookmark (`=`, `+2`, `-1`, `+2-1`), or the remote's change id when there is no local bookmark. A dim cell means that the local bookmark does not track that remote.
-- The **log pane**: the `jj log` graph with jj's colours (or your `log-template`). `▶` marks the selected change.
+- The **log pane** (left): the `jj log` graph with jj's colours (or your `log-template`). `▶` marks the selected change. dojo starts here, on the working copy.
+- The **bookmarks pane** (right): one row per bookmark. The columns are the local change, one column per remote (`@sundae`, `@origin`), and notes. A remote column shows ahead/behind against the local bookmark (`=`, `+2`, `-1`, `+2-1`), or the remote's change id when there is no local bookmark. A dim cell means that the local bookmark does not track that remote.
 - A status line and a line of key hints.
 
 From 100 columns, the two panes are side by side. On a narrower terminal, dojo shows one pane at a time; `Tab` switches.
+
+`Enter` opens the selected item. `Esc` (or `q`) goes back to the screen before.
+
+### Bookmark view
+
+`Enter` on a bookmark opens its view:
+
+- At the top, the state of the bookmark: the local change, and one line per remote. Each line tells you if the remote is the same as your bookmark, has commits that you do not have (`y` sync), or does not have your commits (`p` push).
+- Below, the log of the bookmark's changes: from `trunk()` to the bookmark, the commits of its remote copies (for example new commits on `origin`), and your working copy when it is on top of the bookmark. A bookmark without own changes (for example `main`) shows its recent history.
+
+`j`/`k` select a change, and `Enter` opens it. `s`, `p`, `y`, and `P` act on this bookmark.
+
+### Change detail
+
+`Enter` on a change opens its detail:
+
+- The header: the description title, the change and commit ids, the author, the time, the state (working copy, empty, conflict, immutable), and the bookmarks. A long description is cut; `v` shows all of it.
+- The **files**: one row per file, with the status (`A` added, `M` modified, `D` deleted, `R` renamed, `C` copied) and the added and removed line counts.
+- The **diff** of the selected file: old and new line numbers, added lines in green, removed lines in red, and the changed part of a changed line in a stronger colour.
+
+From 100 columns, the files are left of the diff. On a narrower terminal, the files are above the diff.
+
+| Key | Action |
+|---|---|
+| `Tab` | Move between the files and the diff |
+| `j` `k` | Files: select a file. Diff: scroll one line |
+| `J` `K` | Next / previous file (from the files or the diff) |
+| `]` `[` | Next / previous hunk |
+| `Space`, `PgDn`, `PgUp` | Page down / up in the diff |
+| `g` `G` | Top / bottom of the diff |
+| `←` `→` | Diff: scroll long lines to the left / right |
+| `v` | Show the whole description, or less |
+| `Esc` | Back |
+
+The change keys (`d`, `n`, `e`, `S`, `a`, `x`, `u`) also work here.
 
 ### Command preview
 
@@ -30,9 +65,10 @@ Commands that need the terminal (`jj describe`, `jj squash` when jj asks for a d
 
 | Key | Action |
 |---|---|
-| `Tab`, `←`, `→` | Switch between the bookmarks pane and the log pane (`h` bookmarks, `l` log) |
+| `Tab`, `←`, `→` | Switch between the log pane and the bookmarks pane (`h` log, `l` bookmarks) |
 | `j` `k` `↑` `↓` | Move the selection (`g` / `G`: first / last) |
-| `Enter` | Change detail: description, files, and the diff (with colours). `j`/`k`, `Space`/`PgUp`, `g`/`G` scroll; `Esc` goes back |
+| `Enter` | Log: open the change detail. Bookmarks: open the bookmark view |
+| `Esc`, `q` | Go back. On the first screen, `q` quits |
 | `f` | Fetch from all remotes (`dojo fetch`) |
 | `s` | Switch to the selected bookmark (`dojo switch`) |
 | `p` | Push the selected bookmark; in the log pane, push the current work (`dojo push`) |
@@ -49,9 +85,9 @@ Commands that need the terminal (`jj describe`, `jj squash` when jj asks for a d
 | `w` | Leave the home view and open the workspace view |
 | `r` | Refresh (dojo also refreshes when another jj command changes the repo) |
 | `?` | Help |
-| `q`, `Ctrl+c` | Quit |
+| `Ctrl+c` | Quit |
 
-The change keys (`d`, `n`, `e`, `S`, `a`, `x`) act on the selected change in the log pane, on the shown change in the change detail, or on the local change of the selected bookmark. The bookmark keys (`s`, `p`, `y`, `P`) act on the selected bookmark in the bookmarks pane, or on the current bookmark (see `dojo status`) in the other views.
+The change keys (`d`, `n`, `e`, `S`, `a`, `x`) act on the selected change in a log, on the shown change in the change detail, or on the local change of the selected bookmark. The bookmark keys (`s`, `p`, `y`, `P`) act on the selected bookmark in the bookmarks pane, on the bookmark of the bookmark view, or else on the current bookmark (see `dojo status`).
 
 ## Workspace view (`dojo ws tui`)
 

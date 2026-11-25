@@ -1,24 +1,24 @@
  dojo  dojo  @ rtssmotx on fix/goals  push → sunda
-╭ Change qsspzlzn fix goals ─────────────────────╮
-│Change    qsspzlznyywr   commit 72fc598a61f3    │
-│Author    Forge <forge@example.com>  2026-11-25 │
-│Bookmarks fix/goals, fix/goals@origin           │
-│                                                │
-│    fix goals                                   │
-│                                                │
-│    Ship dojo this week.                        │
-│                                                │
-│Files (1)  +1 -1                                │
-│  M goals.txt                                   │
-│                                                │
-│diff --git a/goals.txt b/goals.txt              │
-│index 1111111..2222222 100644                   │
-│--- a/goals.txt                                 │
-│+++ b/goals.txt                                 │
-│@@ -1,1 +1,1 @@                                 │
-│-goals: none                                    │
-│+goals: ship dojo                               │
-│                                                │
+╭ Change qsspzlzn ───────────────────────────────╮
+│fix goals                                       │
+│qsspzlznyywr  commit 72fc598a61f3  Forge <forge…│
+│… 3 more lines (v: show all)                    │
 ╰────────────────────────────────────────────────╯
+╭ Files (3) +3 -2 ───────────────────────────────╮
+│▶M  goals.txt                              +2 -1│
+│ A  src/new.rs                             +1 -0│
+│ D  old.txt                                +0 -1│
+╰────────────────────────────────────────────────╯
+╭ M goals.txt  +2 -1 ────────────────────────────▲
+│    ⋯ │@@ -1 +1 @@ goals                        █
+│ 1  1 │ # Goals                                 █
+│ 2    │-goals: none                             █
+│    2 │+goals: ship dojo                        █
+│ 3  3 │ owner: team                             █
+│      │                                         █
+│    ⋯ │@@ -20 +20 @@ notes                      █
+│20 20 │ keep                                    █
+│   21 │+added line                              █
+╰────────────────────────────────────────────────▼
 
- Esc back  ↑↓ scroll  d describe  n new  e edit
+ Esc back  Tab files/diff  J K file  ] [ hunk

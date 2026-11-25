@@ -1,5 +1,5 @@
  dojo  dojo  @ rtssmotx on fix/goals  push → sunda
-╭ Log ───────────────────────────────────────────╮
+╭ Log · Tab: bookmarks ──────────────────────────╮
 │ @  rtssmotx test@example.com 2026-11-25 15:00 3│
 │ │  (empty) (no description set)                │
 │▶○  qsspzlzn forge@example.com 2026-11-25 14:00 │
@@ -13,4 +13,4 @@
 │                                                │
 ╰────────────────────────────────────────────────╯
 
- ? help  Tab pane  Enter detail  f fetch
+ ? help  Tab pane  Enter open  f fetch  s switch

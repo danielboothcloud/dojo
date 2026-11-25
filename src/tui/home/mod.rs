@@ -1,16 +1,21 @@
-//! Home view of `dojo` (no subcommand): bookmarks and log side by side (one
-//! at a time on narrow terminals), the change detail, and keys that run jj
-//! commands. Every command is shown in a preview before it runs.
+//! Home view of `dojo` (no subcommand): the log and the bookmarks side by
+//! side (one at a time on narrow terminals), a view per bookmark, the change
+//! detail, and keys that run jj commands. Every command is shown in a
+//! preview before it runs.
 //!
-//! - `state.rs`: data, selections, key handling (no I/O).
-//! - `view.rs`: drawing (pure; snapshot tests).
+//! - `state.rs`: data, selections, screens, key handling (no I/O).
+//! - `view.rs`: drawing of the home screen and the boxes (pure; snapshot tests).
+//! - `bookmark_view.rs`: one bookmark: its remote state and its changes.
+//! - `detail.rs`: one change: header, file list, and the diff.
 //! - `actions.rs`: previews (dry runs of the shared `flow` code) and runs.
-//! - `log_pane.rs`: the `jj log` graph with a selected change.
+//! - `log_pane.rs`: a `jj log` graph with a selected change.
 //!
 //! This file has the I/O: loading data, the event loop, and the terminal
 //! handoff for commands that open an editor.
 
 mod actions;
+mod bookmark_view;
+mod detail;
 mod log_pane;
 mod state;
 mod view;
@@ -26,9 +31,12 @@ use ratatui::backend::CrosstermBackend;
 
 use crate::config;
 use crate::flow::{self, Ctx, identity::Identity};
-use crate::jujutsu::{self, changes};
+use crate::jujutsu::{self, diff};
 use actions::{HomeAction, Outcome};
-use state::{Detail, Home, HomeData, Intent, Modal, Screen};
+use bookmark_view::BookmarkView;
+use detail::Detail;
+use log_pane::LogPane;
+use state::{Home, HomeData, Intent, Modal, Screen};
 
 use super::op_log_pane::OpLogPane;
 
@@ -75,6 +83,7 @@ fn load_data(ctx: &Ctx) -> Result<HomeData> {
         repo_name: config::resolve_repo_name(&ctx.config, &repo_root),
         remotes: ctx.remotes.display_order(),
         push_remote: ctx.remotes.push.clone(),
+        upstream_remote: ctx.remotes.upstream.clone(),
         rows,
         log_ansi,
         line_heads,
@@ -86,11 +95,68 @@ fn load_data(ctx: &Ctx) -> Result<HomeData> {
 
 fn load_detail(ctx: &Ctx, rev: &str) -> Result<Detail> {
     let info = ctx.change(rev)?;
-    let diff = changes::diff_colored(&ctx.root, &info.commit_id).unwrap_or_default();
-    Ok(Detail::new(info, &diff))
+    let files = diff::file_diffs(&ctx.root, &info.commit_id)?;
+    Ok(Detail::new(info, files))
 }
 
-/// Reload the context (snapshot) and the data; keep the screen.
+fn load_bookmark_view(ctx: &Ctx, data: &HomeData, name: &str) -> Result<BookmarkView> {
+    let row = data
+        .rows
+        .iter()
+        .find(|r| r.name == name)
+        .cloned()
+        .with_context(|| format!("bookmark {name} is gone"))?;
+    let history_only = ctx.count(&bookmark_view::own_changes(name)) == 0;
+    let (own, history) = bookmark_view::revsets(name);
+    let revset = if history_only { history } else { own };
+    let (ansi, heads) =
+        jujutsu::log_graph_for_revset(&ctx.root, &revset, ctx.config.log_template.as_deref())?;
+    let mut log = LogPane::new(&ansi, heads);
+    let tip = row
+        .local
+        .as_ref()
+        .and_then(|l| l.change_id.clone())
+        .or_else(|| row.remotes.iter().find_map(|c| c.change_id.clone()));
+    if let Some(id) = tip {
+        log.select_change(&id);
+    }
+    Ok(BookmarkView {
+        row,
+        log,
+        remotes: data.remotes.clone(),
+        push_remote: data.push_remote.clone(),
+        upstream_remote: data.upstream_remote.clone(),
+        history_only,
+    })
+}
+
+/// Load a screen again after a change in the repo. `None`: the screen
+/// shows something that is gone (an abandoned change, a deleted bookmark).
+fn reload_screen(ctx: &Ctx, data: &HomeData, screen: Screen) -> Option<Screen> {
+    match screen {
+        Screen::Home => Some(Screen::Home),
+        Screen::OpLog(p) => Some(Screen::OpLog(p)),
+        Screen::Bookmark(old) => {
+            let mut fresh = load_bookmark_view(ctx, data, &old.row.name).ok()?;
+            if let Some(c) = old.log.selected_change() {
+                fresh.log.select_change(c);
+            }
+            Some(Screen::Bookmark(Box::new(fresh)))
+        }
+        Screen::Detail(old) => {
+            let mut fresh = load_detail(ctx, &old.info.change_id).ok()?;
+            if let Some(f) = old.selected_file() {
+                fresh.select_path(&f.path);
+            }
+            fresh.focus = old.focus;
+            fresh.scroll = old.scroll;
+            fresh.hscroll = old.hscroll;
+            Some(Screen::Detail(Box::new(fresh)))
+        }
+    }
+}
+
+/// Reload the context (snapshot) and the data; keep the screens.
 fn refresh(ctx: &mut Ctx, home: &mut Home) {
     match Ctx::load_at(ctx.root.clone()).and_then(|c| {
         let data = load_data(&c)?;
@@ -106,18 +172,14 @@ fn refresh(ctx: &mut Ctx, home: &mut Home) {
         }
         Err(e) => home.status = Some((format!("refresh failed: {e:#}"), true)),
     }
-    // The change in the detail can be gone (abandon) or rewritten.
-    if let Screen::Detail(d) = &home.screen {
-        let id = d.info.change_id.clone();
-        let scroll = d.scroll;
-        home.screen = match load_detail(ctx, &id) {
-            Ok(mut fresh) => {
-                fresh.scroll = scroll;
-                Screen::Detail(Box::new(fresh))
-            }
-            Err(_) => Screen::Home,
-        };
-    }
+    let mut stack = std::mem::take(&mut home.back);
+    stack.push(std::mem::replace(&mut home.screen, Screen::Home));
+    let mut fresh: Vec<Screen> = stack
+        .into_iter()
+        .filter_map(|s| reload_screen(ctx, &home.data, s))
+        .collect();
+    home.screen = fresh.pop().unwrap_or(Screen::Home);
+    home.back = fresh;
 }
 
 fn event_loop(session: &mut Session, home: &mut Home, ctx: &mut Ctx) -> Result<Exit> {
@@ -180,11 +242,15 @@ fn handle_intent(
         }
         Intent::Run(action) => run_action(session, home, ctx, &action)?,
         Intent::OpenDetail(rev) => match load_detail(ctx, &rev) {
-            Ok(d) => home.screen = Screen::Detail(Box::new(d)),
+            Ok(d) => home.open(Screen::Detail(Box::new(d))),
             Err(e) => home.status = Some((format!("cannot show {rev}: {e:#}"), true)),
         },
+        Intent::OpenBookmark(name) => match load_bookmark_view(ctx, &home.data, &name) {
+            Ok(v) => home.open(Screen::Bookmark(Box::new(v))),
+            Err(e) => home.status = Some((format!("cannot show {name}: {e:#}"), true)),
+        },
         Intent::OpenOpLog => match jujutsu::op_log(&ctx.root, 200) {
-            Ok(ops) => home.screen = Screen::OpLog(Box::new(OpLogPane::new(ops, &[]))),
+            Ok(ops) => home.open(Screen::OpLog(Box::new(OpLogPane::new(ops, &[])))),
             Err(e) => home.status = Some((format!("jj op log failed: {e:#}"), true)),
         },
     }

@@ -1,14 +1,13 @@
 //! State and key handling of the home view. No I/O here: a key gives an
 //! [`Intent`], and the event loop in `mod.rs` does the jj work.
 
-use ansi_to_tui::IntoText;
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
-use ratatui::text::Text;
 
 use super::actions::{HomeAction, Outcome, Preview, offer_action};
+use super::bookmark_view::BookmarkView;
+use super::detail::Detail;
 use super::log_pane::LogPane;
 use crate::jujutsu::bookmarks::BookmarkRow;
-use crate::jujutsu::changes::ChangeInfo;
 use crate::tui::op_log_pane::OpLogPane;
 
 /// Everything the home view shows, loaded by `mod.rs`.
@@ -18,6 +17,8 @@ pub(crate) struct HomeData {
     /// Remote columns, push remote first.
     pub remotes: Vec<String>,
     pub push_remote: String,
+    /// The forge remote that `dojo sync` rebases onto.
+    pub upstream_remote: String,
     pub rows: Vec<BookmarkRow>,
     pub log_ansi: String,
     pub line_heads: Vec<Option<String>>,
@@ -31,47 +32,13 @@ pub(crate) struct HomeData {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum Pane {
-    Bookmarks,
     Log,
-}
-
-/// Change detail: description, files and the coloured diff.
-pub(crate) struct Detail {
-    pub info: ChangeInfo,
-    pub diff: Text<'static>,
-    pub scroll: u16,
-    /// Lines of the whole detail text (set by the view).
-    pub content_lines: u16,
-    /// Visible height (set by the view).
-    pub page: u16,
-}
-
-impl Detail {
-    pub(crate) fn new(info: ChangeInfo, diff_ansi: &str) -> Self {
-        let diff = diff_ansi
-            .into_text()
-            .unwrap_or_else(|_| Text::from(diff_ansi.to_string()));
-        Self {
-            info,
-            diff,
-            scroll: 0,
-            content_lines: 0,
-            page: 0,
-        }
-    }
-
-    fn max_scroll(&self) -> u16 {
-        self.content_lines.saturating_sub(self.page)
-    }
-
-    fn scroll_by(&mut self, delta: i32) {
-        let next = (i32::from(self.scroll) + delta).clamp(0, i32::from(self.max_scroll()));
-        self.scroll = u16::try_from(next).unwrap_or(0);
-    }
+    Bookmarks,
 }
 
 pub(crate) enum Screen {
     Home,
+    Bookmark(Box<BookmarkView>),
     Detail(Box<Detail>),
     OpLog(Box<OpLogPane>),
 }
@@ -99,6 +66,8 @@ pub(crate) enum Intent {
     Run(HomeAction),
     /// Open the change detail for this revision.
     OpenDetail(String),
+    /// Open the bookmark view for this bookmark.
+    OpenBookmark(String),
     OpenOpLog,
     /// Leave and open the workspace TUI (`dojo ws tui`).
     Workspaces,
@@ -110,10 +79,32 @@ pub(crate) struct Home {
     /// Index into `data.rows`.
     pub bookmark_sel: usize,
     pub focus: Pane,
+    /// The screen on top.
     pub screen: Screen,
+    /// Screens below it; `Esc` goes back to the last one.
+    pub back: Vec<Screen>,
     pub modal: Option<Modal>,
     /// One-line message: `(text, is_error)`.
     pub status: Option<(String, bool)>,
+}
+
+/// Navigation keys of the bookmark view. `None`: not a navigation key.
+fn bookmark_nav(view: &mut BookmarkView, code: KeyCode) -> Option<Intent> {
+    match code {
+        KeyCode::Down | KeyCode::Char('j') => view.log.down(),
+        KeyCode::Up | KeyCode::Char('k') => view.log.up(),
+        KeyCode::Char('g') | KeyCode::Home => view.log.top(),
+        KeyCode::Char('G') | KeyCode::End => view.log.bottom(),
+        KeyCode::Enter => {
+            return Some(
+                view.log
+                    .selected_change()
+                    .map_or(Intent::None, |c| Intent::OpenDetail(c.to_string())),
+            );
+        }
+        _ => return None,
+    }
+    Some(Intent::None)
 }
 
 /// Length of change ids in commands (unique in practice, readable).
@@ -142,8 +133,9 @@ impl Home {
             data,
             log,
             bookmark_sel,
-            focus: Pane::Bookmarks,
+            focus: Pane::Log,
             screen: Screen::Home,
+            back: Vec::new(),
             modal: None,
             status,
         }
@@ -164,6 +156,17 @@ impl Home {
         self.data = data;
     }
 
+    /// Show a screen on top of the current one.
+    pub(crate) fn open(&mut self, screen: Screen) {
+        let below = std::mem::replace(&mut self.screen, screen);
+        self.back.push(below);
+    }
+
+    /// Go back to the screen below.
+    pub(crate) fn go_back(&mut self) {
+        self.screen = self.back.pop().unwrap_or(Screen::Home);
+    }
+
     pub(crate) fn selected_bookmark(&self) -> Option<&BookmarkRow> {
         self.data.rows.get(self.bookmark_sel)
     }
@@ -171,25 +174,26 @@ impl Home {
     /// The change the change keys (describe, new, edit, ...) act on.
     pub(crate) fn target_change(&self) -> Option<String> {
         match &self.screen {
-            Screen::Detail(d) => return Some(d.info.change_id.clone()),
-            Screen::OpLog(_) => return None,
-            Screen::Home => {}
-        }
-        match self.focus {
-            Pane::Log => self.log.selected_change().map(str::to_string),
-            Pane::Bookmarks => self.selected_bookmark().and_then(|r| {
-                r.local
-                    .as_ref()
-                    .and_then(|l| l.change_id.clone())
-                    .or_else(|| r.remotes.iter().find_map(|c| c.change_id.clone()))
-            }),
+            Screen::Detail(d) => Some(d.info.change_id.clone()),
+            Screen::Bookmark(b) => b.log.selected_change().map(str::to_string),
+            Screen::OpLog(_) => None,
+            Screen::Home => match self.focus {
+                Pane::Log => self.log.selected_change().map(str::to_string),
+                Pane::Bookmarks => self.selected_bookmark().and_then(|r| {
+                    r.local
+                        .as_ref()
+                        .and_then(|l| l.change_id.clone())
+                        .or_else(|| r.remotes.iter().find_map(|c| c.change_id.clone()))
+                }),
+            },
         }
     }
 
-    /// The bookmark that sync, push and pr act on.
+    /// The bookmark that switch, sync, push and pr act on.
     fn target_bookmark(&self) -> Option<String> {
-        match (self.focus, &self.screen) {
-            (Pane::Bookmarks, Screen::Home) => self.selected_bookmark().map(|r| r.name.clone()),
+        match (&self.screen, self.focus) {
+            (Screen::Bookmark(b), _) => Some(b.row.name.clone()),
+            (Screen::Home, Pane::Bookmarks) => self.selected_bookmark().map(|r| r.name.clone()),
             _ => self.data.current_bookmark.clone(),
         }
     }
@@ -205,37 +209,32 @@ impl Home {
         if self.modal.is_some() {
             return self.handle_modal_key(key);
         }
-        match &mut self.screen {
-            Screen::Detail(d) => {
-                let page = i32::from(d.page.max(2));
-                match key.code {
-                    KeyCode::Esc | KeyCode::Char('q') | KeyCode::Backspace => {
-                        self.screen = Screen::Home;
-                        return Intent::None;
-                    }
-                    KeyCode::Down | KeyCode::Char('j') => d.scroll_by(1),
-                    KeyCode::Up | KeyCode::Char('k') => d.scroll_by(-1),
-                    KeyCode::PageDown | KeyCode::Char(' ') => d.scroll_by(page - 1),
-                    KeyCode::PageUp => d.scroll_by(1 - page),
-                    KeyCode::Char('g') | KeyCode::Home => d.scroll = 0,
-                    KeyCode::Char('G') | KeyCode::End => d.scroll = d.max_scroll(),
-                    _ => return self.change_key(key.code),
-                }
-                Intent::None
-            }
-            Screen::OpLog(pane) => match key.code {
-                KeyCode::Esc | KeyCode::Char('q') | KeyCode::Char('o') => {
-                    self.screen = Screen::Home;
-                    Intent::None
-                }
-                KeyCode::Char('u') => self.change_key(KeyCode::Char('u')),
-                code => {
-                    pane.handle_key(code);
-                    Intent::None
-                }
-            },
-            Screen::Home => self.home_key(key.code),
+        let code = key.code;
+        let back = matches!(code, KeyCode::Esc | KeyCode::Char('q') | KeyCode::Backspace);
+        if back && !matches!(self.screen, Screen::Home) {
+            self.go_back();
+            return Intent::None;
         }
+        let handled = match &mut self.screen {
+            Screen::Home => return self.home_key(code),
+            Screen::Detail(d) => d.handle_key(code).then_some(Intent::None),
+            Screen::Bookmark(view) => bookmark_nav(view, code),
+            Screen::OpLog(pane) => {
+                if code == KeyCode::Char('o') {
+                    self.go_back();
+                    return Intent::None;
+                }
+                if code != KeyCode::Char('u') {
+                    pane.handle_key(code);
+                    return Intent::None;
+                }
+                None
+            }
+        };
+        if let Some(intent) = handled {
+            return intent;
+        }
+        self.common_key(code)
     }
 
     fn handle_modal_key(&mut self, key: KeyEvent) -> Intent {
@@ -287,10 +286,6 @@ impl Home {
     fn home_key(&mut self, code: KeyCode) -> Intent {
         match code {
             KeyCode::Char('q') => Intent::Quit,
-            KeyCode::Char('?') => {
-                self.modal = Some(Modal::Help);
-                Intent::None
-            }
             KeyCode::Tab | KeyCode::BackTab | KeyCode::Left | KeyCode::Right => {
                 self.focus = match self.focus {
                     Pane::Bookmarks => Pane::Log,
@@ -299,11 +294,11 @@ impl Home {
                 Intent::None
             }
             KeyCode::Char('h') => {
-                self.focus = Pane::Bookmarks;
+                self.focus = Pane::Log;
                 Intent::None
             }
             KeyCode::Char('l') => {
-                self.focus = Pane::Log;
+                self.focus = Pane::Bookmarks;
                 Intent::None
             }
             KeyCode::Down | KeyCode::Char('j') => {
@@ -322,31 +317,42 @@ impl Home {
                 self.move_selection(i32::MAX);
                 Intent::None
             }
-            KeyCode::Enter => match self.target_change() {
-                Some(c) => Intent::OpenDetail(c),
-                None => Intent::None,
+            KeyCode::Enter => match self.focus {
+                Pane::Bookmarks => self
+                    .selected_bookmark()
+                    .map_or(Intent::None, |r| Intent::OpenBookmark(r.name.clone())),
+                Pane::Log => self
+                    .log
+                    .selected_change()
+                    .map_or(Intent::None, |c| Intent::OpenDetail(c.to_string())),
             },
+            KeyCode::Char('p') if self.focus == Pane::Log => {
+                Intent::Preview(HomeAction::Push(None))
+            }
+            KeyCode::Char('s') if self.focus == Pane::Log => {
+                self.set_status(
+                    "Select a bookmark (Tab) to switch to it, or press n for a new change here.",
+                    false,
+                );
+                Intent::None
+            }
+            code => self.common_key(code),
+        }
+    }
+
+    /// Keys that work on every screen.
+    fn common_key(&mut self, code: KeyCode) -> Intent {
+        match code {
+            KeyCode::Char('?') => {
+                self.modal = Some(Modal::Help);
+                Intent::None
+            }
             KeyCode::Char('r') => Intent::Refresh,
             KeyCode::Char('o') => Intent::OpenOpLog,
             KeyCode::Char('w') => Intent::Workspaces,
             KeyCode::Char('f') => Intent::Preview(HomeAction::Fetch),
-            KeyCode::Char('s') => match (self.focus, self.selected_bookmark()) {
-                (Pane::Bookmarks, Some(r)) => Intent::Preview(HomeAction::Switch(r.name.clone())),
-                _ => {
-                    self.set_status(
-                        "Select a bookmark (Tab) to switch to it, or press n for a new change here.",
-                        false,
-                    );
-                    Intent::None
-                }
-            },
-            KeyCode::Char('p') => {
-                let bookmark = match self.focus {
-                    Pane::Bookmarks => self.selected_bookmark().map(|r| r.name.clone()),
-                    Pane::Log => None,
-                };
-                Intent::Preview(HomeAction::Push(bookmark))
-            }
+            KeyCode::Char('s') => self.with_bookmark("switch to", HomeAction::Switch),
+            KeyCode::Char('p') => self.with_bookmark("push", |b| HomeAction::Push(Some(b))),
             KeyCode::Char('y') => self.with_bookmark("sync", HomeAction::Sync),
             KeyCode::Char('P') => self.with_bookmark("open a pull request for", HomeAction::Pr),
             code => self.change_key(code),
@@ -485,22 +491,23 @@ pub(crate) mod tests {
         }
     }
 
+    pub(crate) const FIX: &str = "qsspzlznyywrkmnvmqulnoyvqtzswotq";
+
     /// Fixed data for the state and snapshot tests.
     pub(crate) fn sample_data() -> HomeData {
         let wc = "rtssmotxlmvtwkqnzzpyoqklrzvnulnx";
-        let fix = "qsspzlznyywrkmnvmqulnoyvqtzswotq";
         let main = "npppruztlspuknmrxvnszvyvlqtuuzrs";
         let rows = vec![
             BookmarkRow {
                 name: "fix/goals".into(),
                 local: Some(LocalCell {
                     commit_id: Some("72fc598a61f3".into()),
-                    change_id: Some(fix.into()),
+                    change_id: Some(FIX.into()),
                     conflict: false,
                     conflict_change_ids: Vec::new(),
                 }),
                 remotes: vec![
-                    remote("sundae", fix, true, 0),
+                    remote("sundae", FIX, true, 0),
                     remote("origin", "tpkvspyskppl", false, 1),
                 ],
                 protected: false,
@@ -526,6 +533,24 @@ pub(crate) mod tests {
                 protected: false,
             },
         ];
+        let log_ansi = sample_log().0;
+        HomeData {
+            repo_name: "dojo".into(),
+            remotes: vec!["sundae".into(), "origin".into()],
+            push_remote: "sundae".into(),
+            upstream_remote: "origin".into(),
+            rows,
+            log_ansi,
+            line_heads: sample_log().1,
+            working_copy: Some(wc.into()),
+            current_bookmark: Some("fix/goals".into()),
+            identity_hint: None,
+        }
+    }
+
+    pub(crate) fn sample_log() -> (String, Vec<Option<String>>) {
+        let wc = "rtssmotxlmvtwkqnzzpyoqklrzvnulnx";
+        let main = "npppruztlspuknmrxvnszvyvlqtuuzrs";
         let log_ansi = concat!(
             "@  rtssmotx test@example.com 2026-11-25 15:00 3d015f14\n",
             "│  (empty) (no description set)\n",
@@ -536,27 +561,32 @@ pub(crate) mod tests {
             "~\n",
         )
         .to_string();
-        let line_heads = [wc, wc, fix, fix, main, main]
+        let heads = [wc, wc, FIX, FIX, main, main]
             .iter()
             .map(|s| Some((*s).to_string()))
             .chain(std::iter::once(None))
             .collect();
-        HomeData {
-            repo_name: "dojo".into(),
-            remotes: vec!["sundae".into(), "origin".into()],
+        (log_ansi, heads)
+    }
+
+    pub(crate) fn sample_bookmark_view(home: &Home) -> BookmarkView {
+        let (ansi, heads) = sample_log();
+        let mut log = LogPane::new(&ansi, heads);
+        log.select_change(FIX);
+        BookmarkView {
+            row: home.data.rows[0].clone(),
+            log,
+            remotes: home.data.remotes.clone(),
             push_remote: "sundae".into(),
-            rows,
-            log_ansi,
-            line_heads,
-            working_copy: Some(wc.into()),
-            current_bookmark: Some("fix/goals".into()),
-            identity_hint: None,
+            upstream_remote: "origin".into(),
+            history_only: false,
         }
     }
 
     #[test]
-    fn starts_on_the_current_bookmark_and_working_copy() {
+    fn starts_on_the_log_at_the_working_copy() {
         let home = Home::new(sample_data());
+        assert_eq!(home.focus, Pane::Log);
         assert_eq!(home.selected_bookmark().unwrap().name, "fix/goals");
         assert_eq!(
             home.log.selected_change(),
@@ -567,6 +597,28 @@ pub(crate) mod tests {
     #[test]
     fn keys_give_previews_for_the_selected_item() {
         let mut home = Home::new(sample_data());
+        // Log pane: change keys act on the selected change.
+        home.handle_key(key('j'));
+        match home.handle_key(key('n')) {
+            Intent::Preview(HomeAction::Jj { args, .. }) => {
+                assert_eq!(args, vec!["new", "qsspzlznyywr"]);
+            }
+            other => panic!("unexpected {other:?}"),
+        }
+        match home.handle_key(key('d')) {
+            Intent::Preview(a) => assert!(a.interactive()),
+            other => panic!("unexpected {other:?}"),
+        }
+        assert_eq!(
+            home.handle_key(key('p')),
+            Intent::Preview(HomeAction::Push(None))
+        );
+        assert_eq!(
+            home.handle_key(code(KeyCode::Enter)),
+            Intent::OpenDetail(FIX.into())
+        );
+        // Bookmarks pane.
+        home.handle_key(code(KeyCode::Tab));
         assert_eq!(
             home.handle_key(key('s')),
             Intent::Preview(HomeAction::Switch("fix/goals".into()))
@@ -580,24 +632,33 @@ pub(crate) mod tests {
             home.handle_key(key('p')),
             Intent::Preview(HomeAction::Push(Some("main".into())))
         );
-        // Log pane: change keys act on the selected change.
-        home.handle_key(code(KeyCode::Tab));
-        home.handle_key(key('j'));
-        match home.handle_key(key('n')) {
-            Intent::Preview(HomeAction::Jj { args, .. }) => {
-                assert_eq!(args, vec!["new", "qsspzlznyywr"]);
-            }
-            other => panic!("unexpected {other:?}"),
-        }
-        match home.handle_key(key('d')) {
-            Intent::Preview(a) => assert!(a.interactive()),
-            other => panic!("unexpected {other:?}"),
-        }
         assert_eq!(
             home.handle_key(code(KeyCode::Enter)),
-            Intent::OpenDetail("qsspzlznyywrkmnvmqulnoyvqtzswotq".into())
+            Intent::OpenBookmark("main".into())
         );
         assert_eq!(home.handle_key(key('q')), Intent::Quit);
+    }
+
+    #[test]
+    fn bookmark_view_acts_on_its_bookmark_and_esc_goes_back() {
+        let mut home = Home::new(sample_data());
+        let view = sample_bookmark_view(&home);
+        home.open(Screen::Bookmark(Box::new(view)));
+        assert_eq!(
+            home.handle_key(key('y')),
+            Intent::Preview(HomeAction::Sync("fix/goals".into()))
+        );
+        assert_eq!(
+            home.handle_key(code(KeyCode::Enter)),
+            Intent::OpenDetail(FIX.into())
+        );
+        home.open(Screen::Detail(Box::new(
+            crate::tui::home::detail::tests::sample_detail(),
+        )));
+        assert_eq!(home.handle_key(key('q')), Intent::None);
+        assert!(matches!(home.screen, Screen::Bookmark(_)));
+        assert_eq!(home.handle_key(code(KeyCode::Esc)), Intent::None);
+        assert!(matches!(home.screen, Screen::Home));
     }
 
     #[test]

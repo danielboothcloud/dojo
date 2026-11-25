@@ -1,5 +1,6 @@
 pub mod bookmarks;
 pub mod changes;
+pub mod diff;
 pub mod remotes;
 
 use crate::hooks::HookVars;
@@ -664,16 +665,19 @@ fn build_pass2_template(display_template: &str) -> String {
 
 /// Dual-pass graph fetch: colored ANSI graph + per-line change_id map.
 ///
-/// `extra_args` are prepended to both passes (e.g. `--at-operation=<id>`).
+/// `extra_args` are prepended to both passes (e.g. `--at-operation=<id>`);
+/// `log_args` follow `log` in both passes (e.g. `--revisions <revset>`).
 fn log_graph_with_heads_inner(
     repo: &Path,
     log_template: Option<&str>,
     extra_args: &[&str],
+    log_args: &[&str],
 ) -> Result<(String, Vec<Option<String>>)> {
     // Pass 1: colored graph
     let mut pass1 = jj_cmd(repo);
     pass1.args(extra_args);
     pass1.args(["log", "--color", "always"]);
+    pass1.args(log_args);
     if let Some(tmpl) = log_template {
         pass1.args(["--template", tmpl]);
     }
@@ -695,6 +699,7 @@ fn log_graph_with_heads_inner(
     let mut pass2 = jj_cmd(repo);
     pass2.args(extra_args);
     pass2.args(["log", "--color", "never", "--template", &pass2_template]);
+    pass2.args(log_args);
     let heads_out = run_jj_output(&mut pass2, "log --color never (heads pass)")
         .context("failed to run jj log (heads)")?;
     let heads_str = String::from_utf8(heads_out.stdout).context("invalid utf-8")?;
@@ -718,7 +723,16 @@ pub fn log_graph_with_heads(
     repo: &Path,
     log_template: Option<&str>,
 ) -> Result<(String, Vec<Option<String>>)> {
-    log_graph_with_heads_inner(repo, log_template, &[])
+    log_graph_with_heads_inner(repo, log_template, &[], &[])
+}
+
+/// `jj log --revisions <revset>` with ANSI colors and a per-line change_id map.
+pub fn log_graph_for_revset(
+    repo: &Path,
+    revset: &str,
+    log_template: Option<&str>,
+) -> Result<(String, Vec<Option<String>>)> {
+    log_graph_with_heads_inner(repo, log_template, &[], &["--revisions", revset])
 }
 
 /// Fetch `jj log` at a specific operation, with ANSI colors and a per-line change_id map.
@@ -728,7 +742,7 @@ pub fn log_graph_at_operation(
     log_template: Option<&str>,
 ) -> Result<(String, Vec<Option<String>>)> {
     let at_op = format!("--at-operation={op_id}");
-    log_graph_with_heads_inner(repo, log_template, &[&at_op])
+    log_graph_with_heads_inner(repo, log_template, &[&at_op], &[])
 }
 
 /// Get a deterministic key representing the current jj operation head(s).

@@ -1,7 +1,7 @@
  dojo  dojo  @ rtssmotx on fix/goals  push → sundae
-╭ Bookmarks · Tab: log ────────────────────────────────────────────────────────╮
-│  BOOKMARK   LOCAL    @sundae @origin NOTES                                   │
-│▶╭ Sync fix/goals with the forge ───────────────────────────────────────────╮ │
+╭ Log · Tab: bookmarks ────────────────────────────────────────────────────────╮
+│▶@  rtssmotx test@example.com 2026-11-25 15:00 3d015f14                       │
+│ ╭ Sync fix/goals with the forge ───────────────────────────────────────────╮ │
 │ │dojo runs:                                                                │ │
 │ │$ jj git fetch --remote origin --remote sundae                            │ │
 │ │    get new commits from the remotes                                      │ │

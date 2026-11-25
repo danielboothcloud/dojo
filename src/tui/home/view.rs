@@ -6,7 +6,8 @@ use ratatui::widgets::{Block, BorderType, Clear, Paragraph, Wrap};
 use unicode_width::UnicodeWidthStr;
 
 use super::actions::{Outcome, Preview};
-use super::state::{Detail, Home, Modal, Pane, Screen, short_change};
+use super::state::{Home, Modal, Pane, Screen};
+use super::{bookmark_view, detail};
 use crate::flow::branches::ahead_behind;
 use crate::jujutsu::bookmarks::BookmarkRow;
 use crate::text_utils::truncate_end;
@@ -22,11 +23,11 @@ pub(crate) fn border_style(focused: bool) -> Style {
     }
 }
 
-fn dim() -> Style {
+pub(crate) fn dim() -> Style {
     Style::default().fg(Color::DarkGray)
 }
 
-fn key_style() -> Style {
+pub(crate) fn key_style() -> Style {
     Style::default().fg(Color::Cyan).bold()
 }
 
@@ -43,7 +44,8 @@ pub(crate) fn draw(frame: &mut Frame, home: &mut Home) {
     draw_header(frame, header, home);
     match &mut home.screen {
         Screen::Home => draw_home(frame, body, home),
-        Screen::Detail(d) => draw_detail(frame, body, d),
+        Screen::Bookmark(v) => bookmark_view::draw(frame, body, v),
+        Screen::Detail(d) => detail::draw(frame, body, d),
         Screen::OpLog(pane) => pane.draw(frame, body, true, true, false),
     }
     if let Some((text, error)) = &home.status {
@@ -94,15 +96,15 @@ fn draw_header(frame: &mut Frame, area: Rect, home: &Home) {
 fn draw_home(frame: &mut Frame, area: Rect, home: &mut Home) {
     if area.width >= WIDE {
         let [left, right] =
-            Layout::horizontal([Constraint::Percentage(45), Constraint::Percentage(55)])
+            Layout::horizontal([Constraint::Percentage(55), Constraint::Percentage(45)])
                 .areas(area);
-        draw_bookmarks(frame, left, home, false);
         let focused = home.focus == Pane::Log;
-        home.log.draw(frame, right, focused);
+        home.log.draw(frame, left, focused, " Log ");
+        draw_bookmarks(frame, right, home, false);
     } else {
         match home.focus {
+            Pane::Log => home.log.draw(frame, area, true, " Log · Tab: bookmarks "),
             Pane::Bookmarks => draw_bookmarks(frame, area, home, true),
-            Pane::Log => home.log.draw(frame, area, true),
         }
     }
 }
@@ -147,7 +149,7 @@ fn pad(s: &str, width: usize) -> String {
 fn draw_bookmarks(frame: &mut Frame, area: Rect, home: &Home, narrow: bool) {
     let focused = home.focus == Pane::Bookmarks;
     let title = if narrow {
-        " Bookmarks · Tab: log "
+        " Bookmarks · Tab: log · Enter: open "
     } else {
         " Bookmarks "
     };
@@ -258,118 +260,6 @@ fn draw_bookmarks(frame: &mut Frame, area: Rect, home: &Home, narrow: bool) {
     frame.render_widget(Paragraph::new(lines), inner);
 }
 
-/// The text of the change detail: header, description, files, diff.
-fn detail_lines(d: &Detail) -> Vec<Line<'static>> {
-    let c = &d.info;
-    let label = |s: &str| Span::styled(format!("{s:<10}"), dim());
-    let mut lines = vec![Line::from(vec![
-        label("Change"),
-        Span::styled(
-            short_change(&c.change_id).to_string(),
-            Style::default().fg(Color::Magenta),
-        ),
-        Span::styled("   commit ", dim()),
-        Span::styled(
-            c.commit_id[..c.commit_id.len().min(12)].to_string(),
-            Style::default().fg(Color::Blue),
-        ),
-    ])];
-    lines.push(Line::from(vec![
-        label("Author"),
-        Span::raw(c.author.clone()),
-        Span::styled(format!("  {}", c.timestamp), dim()),
-    ]));
-    let mut marks: Vec<String> = c.local_bookmarks.clone();
-    marks.extend(c.remote_bookmarks.iter().cloned());
-    if !marks.is_empty() {
-        lines.push(Line::from(vec![
-            label("Bookmarks"),
-            Span::styled(marks.join(", "), Style::default().fg(Color::Green)),
-        ]));
-    }
-    let mut state = Vec::new();
-    if c.working_copy {
-        state.push("working copy");
-    }
-    if c.empty {
-        state.push("empty");
-    }
-    if c.conflict {
-        state.push("conflict");
-    }
-    if c.immutable {
-        state.push("immutable");
-    }
-    if !state.is_empty() {
-        lines.push(Line::from(vec![
-            label("State"),
-            Span::raw(state.join(" · ")),
-        ]));
-    }
-    lines.push(Line::raw(""));
-    if c.has_description() {
-        for l in c.description.trim_end().lines() {
-            lines.push(Line::raw(format!("    {l}")));
-        }
-    } else {
-        lines.push(Line::styled("    (no description)", dim()));
-    }
-    lines.push(Line::raw(""));
-    lines.push(Line::from(vec![
-        Span::styled(
-            format!("Files ({})", c.files.len()),
-            Style::default().bold(),
-        ),
-        Span::styled(
-            format!("  +{}", c.lines_added),
-            Style::default().fg(Color::Green),
-        ),
-        Span::styled(
-            format!(" -{}", c.lines_removed),
-            Style::default().fg(Color::Red),
-        ),
-    ]));
-    for f in &c.files {
-        let (letter, color) = match f.status.as_str() {
-            "added" => ("A", Color::Green),
-            "removed" => ("D", Color::Red),
-            "renamed" => ("R", Color::Cyan),
-            "copied" => ("C", Color::Cyan),
-            _ => ("M", Color::Yellow),
-        };
-        let path = match &f.source {
-            Some(src) if src != &f.path => format!("{src} → {}", f.path),
-            _ => f.path.clone(),
-        };
-        lines.push(Line::from(vec![
-            Span::styled(format!("  {letter} "), Style::default().fg(color)),
-            Span::raw(path),
-        ]));
-    }
-    if !d.diff.lines.is_empty() {
-        lines.push(Line::raw(""));
-        lines.extend(d.diff.lines.iter().cloned());
-    }
-    lines
-}
-
-fn draw_detail(frame: &mut Frame, area: Rect, d: &mut Detail) {
-    let title = format!(" Change {} {} ", d.info.short_id, d.info.title());
-    let block = Block::bordered()
-        .title(truncate_end(&title, area.width.saturating_sub(4) as usize))
-        .border_type(BorderType::Rounded)
-        .border_style(border_style(true));
-    let inner = block.inner(area);
-    let lines = detail_lines(d);
-    d.content_lines = u16::try_from(lines.len()).unwrap_or(u16::MAX);
-    d.page = inner.height;
-    d.scroll = d.scroll.min(d.content_lines.saturating_sub(d.page));
-    frame.render_widget(
-        Paragraph::new(lines).block(block).scroll((d.scroll, 0)),
-        area,
-    );
-}
-
 fn hint_spans(pairs: &[(&str, &str)], width: usize) -> Line<'static> {
     let mut spans = Vec::new();
     let mut used = 0;
@@ -396,19 +286,30 @@ fn draw_hints(frame: &mut Frame, area: Rect, home: &Home) {
         (Some(_), _) => &[("Esc", "close")],
         (None, Screen::Detail(_)) => &[
             ("Esc", "back"),
-            ("↑↓", "scroll"),
+            ("Tab", "files/diff"),
+            ("J K", "file"),
+            ("] [", "hunk"),
+            ("Space", "page"),
+            ("← →", "scroll"),
             ("d", "describe"),
-            ("n", "new"),
             ("e", "edit"),
-            ("S", "squash"),
-            ("a", "abandon"),
-            ("x", "split"),
+            ("?", "help"),
+        ],
+        (None, Screen::Bookmark(_)) => &[
+            ("Esc", "back"),
+            ("Enter", "change"),
+            ("s", "switch"),
+            ("p", "push"),
+            ("y", "sync"),
+            ("P", "pr"),
+            ("n", "new"),
+            ("?", "help"),
         ],
         (None, Screen::OpLog(_)) => &[("Esc", "back"), ("↑↓", "move"), ("u", "undo")],
         (None, Screen::Home) => &[
             ("?", "help"),
             ("Tab", "pane"),
-            ("Enter", "detail"),
+            ("Enter", "open"),
             ("f", "fetch"),
             ("s", "switch"),
             ("p", "push"),
@@ -425,12 +326,16 @@ fn draw_hints(frame: &mut Frame, area: Rect, home: &Home) {
 
 /// Keys for the help box.
 const HELP: &[(&str, &str)] = &[
-    ("Tab h l", "switch between bookmarks and log"),
+    ("Tab h l", "switch between the log and the bookmarks"),
     ("j k ↑ ↓", "move the selection"),
-    ("Enter", "show the change (description, files, diff)"),
+    (
+        "Enter",
+        "log: show the change; bookmarks: show the bookmark",
+    ),
+    ("Esc q", "go back (on the first screen, q quits)"),
     ("f", "fetch from all remotes"),
-    ("s", "switch to the selected bookmark"),
-    ("p", "push the selected bookmark (log: the current work)"),
+    ("s", "switch to the bookmark"),
+    ("p", "push the bookmark (log: the current work)"),
     ("y", "sync the bookmark with the forge"),
     ("P", "open a pull request"),
     ("d", "describe the change (editor)"),
@@ -443,7 +348,14 @@ const HELP: &[(&str, &str)] = &[
     ("o", "operation log"),
     ("w", "workspaces (dojo ws tui)"),
     ("r", "refresh"),
-    ("q", "quit"),
+    ("", ""),
+    ("Change:", ""),
+    ("Tab", "move between the files and the diff"),
+    ("j k", "files: select a file; diff: scroll"),
+    ("J K", "next / previous file"),
+    ("] [", "next / previous hunk"),
+    ("Space PgUp", "page down / up"),
+    ("← →", "scroll long lines"),
 ];
 
 fn modal_lines(modal: &Modal) -> (String, Vec<Line<'static>>, Style) {
@@ -602,9 +514,9 @@ fn draw_modal(frame: &mut Frame, area: Rect, modal: &Modal) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::jujutsu::changes::{ChangeInfo, ChangedFile};
     use crate::tui::home::actions::HomeAction;
-    use crate::tui::home::state::tests::{code, key, sample_data};
+    use crate::tui::home::detail::tests::sample_detail;
+    use crate::tui::home::state::tests::{code, key, sample_bookmark_view, sample_data};
     use crossterm::event::KeyCode;
     use ratatui::Terminal;
     use ratatui::backend::TestBackend;
@@ -651,45 +563,11 @@ mod tests {
         );
     }
 
-    fn sample_detail() -> Detail {
-        let info = ChangeInfo {
-            change_id: "qsspzlznyywrkmnvmqulnoyvqtzswotq".into(),
-            short_id: "qsspzlzn".into(),
-            commit_id: "72fc598a61f3aa00".into(),
-            description: "fix goals\n\nShip dojo this week.\n".into(),
-            author: "Forge <forge@example.com>".into(),
-            timestamp: "2026-11-25 14:00".into(),
-            empty: false,
-            conflict: false,
-            immutable: false,
-            working_copy: false,
-            local_bookmarks: vec!["fix/goals".into()],
-            remote_bookmarks: vec!["fix/goals@origin".into()],
-            parents: vec!["npppruztlspuknmrxvnszvyvlqtuuzrs".into()],
-            files: vec![ChangedFile {
-                status: "modified".into(),
-                path: "goals.txt".into(),
-                source: None,
-            }],
-            lines_added: 1,
-            lines_removed: 1,
-        };
-        let diff = concat!(
-            "\x1b[1mdiff --git a/goals.txt b/goals.txt\x1b[0m\n",
-            "index 1111111..2222222 100644\n",
-            "--- a/goals.txt\n",
-            "+++ b/goals.txt\n",
-            "@@ -1,1 +1,1 @@\n",
-            "\x1b[31m-goals: none\x1b[0m\n",
-            "\x1b[32m+goals: ship dojo\x1b[0m\n",
-        );
-        Detail::new(info, diff)
-    }
-
     #[test]
     fn snapshot_branches_view() {
         for width in [80, 50] {
             let mut home = Home::new(sample_data());
+            home.handle_key(code(KeyCode::Tab));
             let screen = render(&mut home, width, 16);
             assert_snapshot(&format!("branches_{width}"), &screen);
         }
@@ -699,7 +577,6 @@ mod tests {
     fn snapshot_log_view() {
         for width in [80, 50] {
             let mut home = Home::new(sample_data());
-            home.handle_key(code(KeyCode::Tab));
             home.handle_key(key('j'));
             let screen = render(&mut home, width, 16);
             assert_snapshot(&format!("log_{width}"), &screen);
@@ -710,9 +587,28 @@ mod tests {
     fn snapshot_change_detail() {
         for width in [80, 50] {
             let mut home = Home::new(sample_data());
-            home.screen = Screen::Detail(Box::new(sample_detail()));
+            home.open(Screen::Detail(Box::new(sample_detail())));
             let screen = render(&mut home, width, 24);
             assert_snapshot(&format!("detail_{width}"), &screen);
+        }
+        // Wide: the file list is left of the diff; the second hunk.
+        let mut home = Home::new(sample_data());
+        let mut d = sample_detail();
+        d.handle_key(KeyCode::Tab);
+        home.open(Screen::Detail(Box::new(d)));
+        render(&mut home, 120, 24);
+        home.handle_key(key(']'));
+        assert_snapshot("detail_120", &render(&mut home, 120, 24));
+    }
+
+    #[test]
+    fn snapshot_bookmark_view() {
+        for width in [80, 50] {
+            let mut home = Home::new(sample_data());
+            let view = sample_bookmark_view(&home);
+            home.open(Screen::Bookmark(Box::new(view)));
+            let screen = render(&mut home, width, 18);
+            assert_snapshot(&format!("bookmark_{width}"), &screen);
         }
     }
 
