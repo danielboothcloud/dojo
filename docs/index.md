@@ -1,6 +1,11 @@
 # dojo documentation
 
-`dojo` is a TUI and CLI for managing [Jujutsu (jj)](https://jj-vcs.github.io) workspaces on macOS. It gives you a workspace switcher with a live commit graph, adaptive sync / transfer / close operations, per-project hooks and file templates, and shell integration that moves your shell's working directory when you switch workspaces.
+`dojo` is a TUI and CLI companion for [Jujutsu (jj)](https://jj-vcs.github.io) on Linux and macOS. It has two parts:
+
+- **Bookmark workflows**: `dojo fetch`, `branches`, `switch`, `push`, `sync`, `new-branch`, `status`, and `pr`. Each command shows the jj commands that it runs. They work well in [Sundae](../README.md#sundae-sessions) sessions (explicit remotes, protected `main`, refusal explanations).
+- **Workspace management** (`dojo ws ...`): the original `ji` tool. It gives you a workspace switcher with a live commit graph, adaptive sync / transfer / close operations, per-project hooks and file templates, and shell integration that moves your shell's working directory when you switch workspaces.
+
+dojo is a fork of [daeh/jujutsu-gi](https://github.com/daeh/jujutsu-gi) (`ji`).
 
 ## Assumed knowledge
 
@@ -13,8 +18,8 @@ The docs assume you already know jj — dojo is a tool for people who work with 
 | [installation.md](installation.md) | Prerequisites, build, install, upgrade, uninstall |
 | [shell-integration.md](shell-integration.md) | Why dojo needs a shell wrapper and how to install it |
 | [configuration.md](configuration.md) | Full `.config/dojo.toml` reference with every field and template variable |
-| [cli.md](cli.md) | Full CLI reference for every subcommand and flag |
-| [tui.md](tui.md) | Layout, keybindings, dialogs, modes |
+| [cli.md](cli.md) | Full CLI reference: the bookmark workflows (with the jj commands they run) and the workspace commands |
+| [tui.md](tui.md) | The home view (`dojo`) and the workspace view (`dojo ws tui`): layout, keys, dialogs |
 | [operations.md](operations.md) | How sync, transfer, and close work — with diagrams and jj command sequences |
 | [xattrs.md](xattrs.md) | macOS Finder aliases, xattrs, and hard links across workspace operations |
 | [troubleshooting.md](troubleshooting.md) | Problem/solution pairs |
@@ -30,14 +35,14 @@ The docs assume you already know jj — dojo is a tool for people who work with 
 
 **Using dojo from scripts or agentic workflows:**
 
-1. [cli.md](cli.md)
+1. [cli.md](cli.md) — `--json`, `--dry-run`, exit codes, and offers
 2. [operations.md](operations.md) — in particular the [terminology](operations.md#terminology) and method tables
 3. [configuration.md](configuration.md)
 
 **Deciding how to close or transfer work:**
 
 1. [operations.md](operations.md) — sync mode detection and per-method diagrams
-2. [cli.md](cli.md#dojo-close) — flags
+2. [cli.md](cli.md#dojo-ws-close) — flags
 3. [tui.md](tui.md#close-and-transfer) — dialog keybindings
 
 ## Project layout

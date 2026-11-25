@@ -1,186 +1,173 @@
-# ji — Jujutsu workspace manager
+# dojo — a friendly companion for jj
 
-![ji](docs/assets/ji-create.jpg)
+`dojo` is a TUI and CLI for [Jujutsu (jj)](https://jj-vcs.github.io). It helps you with the daily bookmark work (fetch, switch, push, sync, pull requests) and with jj workspaces. It runs on Linux and macOS.
 
-`ji` is a convenience utility for managing [Jujutsu (jj)](https://jj-vcs.github.io) workspaces. (_Workspaces_ are the jj equivalent of git _worktrees_.)
-
-`ji` creates, switches, syncs, merges, and cleans up workspaces. It includes:
-- An interactive TUI workspace switcher with a live commit graph and one-key workspace operations
-- A non-interactive CLI exposing the same core workspace operations for scripts and agentic workflows
-- Per-project configuration: workspace-path templates, pre/post-start hooks, and file templates
-- Graph-aware operations that adapt to how the workspaces relate — auto-selecting fast-forward or merge, with rebase, squash, and other methods available explicitly
-- One-shot undo/redo of `ji` actions, via `ji`-managed bulk operations in the `jj op log`
-- macOS file-metadata fidelity: Finder aliases survive workspace operations (jj strips xattrs when materializing files; `ji` restores them), and broken hard links are reported
-
-Currently, only macOS is fully supported, but cross-platform support is on the roadmap.
+Every dojo command is a short list of jj commands. dojo prints each command before it runs (`$ jj ...`), and `--dry-run` prints them without a run. The TUI shows the commands in a preview before you confirm. So dojo is also a way to learn jj: you see what each step does on your own repository.
 
 > [!NOTE]
-> `ji` is a lightweight wrapper (a *gi*) for jujutsu. `ji` is a contraction of ***j***(j-g)***i***.
+> **dojo is a fork of [daeh/jujutsu-gi](https://github.com/daeh/jujutsu-gi)** (`ji`, by Dae Houlihan, MIT license). The workspace commands (`dojo ws ...`), the workspace TUI, the configuration, hooks, and the shell integration come from `ji`. dojo adds the bookmark workflows, the home TUI, Linux support, and the [Sundae](#sundae-sessions) integration. Thank you to the `ji` authors.
 
+## Contents
 
-## A handrail for learning jj
-
-Every `ji` operation is a short sequence of jj commands. The TUI close/transfer dialog shows the jj command sequence it will run *before* you confirm (and the dialog's `c` key copies them to the clipboard). If you are still building intuition for jj's primitives, `ji` is a useful way to watch what fast-forward, merge, rebase, and squash look like as jj command sequences on real repository state.
-
-![ji-merge](docs/assets/ji-transfer-detail.gif)
-
-
+- [Requirements](#requirements)
+- [Install](#install)
+- [First use](#first-use)
+- [Bookmark workflows](#bookmark-workflows)
+- [The TUI](#the-tui)
+- [Sundae sessions](#sundae-sessions)
+- [Workspaces (`dojo ws`)](#workspaces-dojo-ws)
+- [Configuration](#configuration)
+- [Documentation](#documentation)
+- [License](#license)
 
 ## Requirements
 
-- [jj](https://jj-vcs.github.io) v0.42.0 or later
+- [jj](https://jj-vcs.github.io) v0.42.0 or later (CI tests the latest release and 0.47).
+- For `dojo pr`: [`gh`](https://cli.github.com) (GitHub) or [`glab`](https://gitlab.com/gitlab-org/cli) (GitLab).
 
 ## Install
 
-```sh
-brew tap daeh/jujutsu-gi
-brew trust --formula daeh/jujutsu-gi/ji
-brew install ji && ji config shell install
-```
+Linux: download a static binary (x86_64 or aarch64) and `SHA256SUMS` from the [releases page](https://github.com/danielboothcloud/dojo/releases), check it with `sha256sum --check --ignore-missing SHA256SUMS`, and put `dojo` on your `PATH`.
 
-This builds `ji` from source (via Homebrew's `rust`) and installs `jj` as a dependency. macOS only. `ji config shell install` adds the wrapper that lets `ji` change your shell's directory on switch (see below). Verify in a new terminal:
+From source (Linux and macOS):
 
 ```sh
-ji --version
+cargo install --locked --git https://github.com/danielboothcloud/dojo dojo
 ```
 
-<details>
-<summary>Install without Homebrew</summary>
-
-Build and install the release binary directly:
+For the workspace commands, install the shell wrapper, so that `dojo ws switch` can change your shell's directory:
 
 ```sh
-cargo build --release && cp target/release/ji ~/.local/bin/ && codesign -f -s - ~/.local/bin/ji
+dojo config shell install
 ```
 
-Or install with cargo from the repository:
-
-```sh
-cargo install --git https://github.com/daeh/jujutsu-gi ji
-```
-
-Make sure `~/.local/bin` (or `~/.cargo/bin`) is on your `PATH`.
-</details>
-
-## Shell integration
-
-```sh
-ji config shell install
-```
-
-This installs a wrapper function for zsh, bash, or fish (detected from the shell you ran it in). For zsh and bash it adds a sourcing line to your shell startup; for fish it installs an autoloaded function (no startup-file edit). The wrapper lets `ji` change the current shell's working directory when you switch workspaces. It previews what it will change and prompts before writing (`--yes` skips the prompt).
-
-See [`docs/shell-integration.md`](docs/shell-integration.md) for the files it touches, the mechanism, and manual installation.
+Details, macOS notes, and uninstall: [docs/installation.md](docs/installation.md).
 
 ## First use
 
 ```sh
-cd /path/to/your/jj-repo/
-ji init                    # generate .config/ji.toml
-ji                         # launch the TUI
+cd /path/to/your/jj-repo
+dojo status            # where am I, and what next?
+dojo                   # open the TUI
 ```
 
-The TUI shows a workspace list on the left and the commit graph on the right. Press `Enter` to switch to a workspace, `n` to create a new one, `?` for the in-app help, and `q` to quit.
+A typical day:
 
-## CLI
-
-```
-ji                               # launch the TUI
-ji switch <target>               # switch to a workspace (by name, bookmark, or change ID)
-ji new <bookmark>                # create a new workspace
-ji close [target]                # close a workspace into a target
-ji transfer [target]             # transfer changes between workspaces (both stay open)
-ji sync [target]                 # sync two workspaces
-ji ls                            # list workspaces
-ji init                          # generate .config/ji.toml
-ji config shell install [SHELL]  # install shell integration
-ji config shell init    [SHELL]  # print shell integration to stdout
+```sh
+dojo fetch                       # what is new on the remotes?
+dojo branches                    # all bookmarks, local and per remote
+dojo switch fix/goals            # work on a bookmark
+# ... edit files ...
+dojo push                        # describe, move the bookmark, push
+dojo pr                          # open a pull request
 ```
 
-Every command accepts `--help`. Full flag reference and behavior: [`docs/cli.md`](docs/cli.md).
+New work:
 
-### Flag summaries
-
-```
-ji new <bookmark> [--revision <REV>] [--path <PATH>] [--message <MSG>] [--create-if-necessary]
-
-ji close [target] [--source <NAME>] [--delete-files]
-                  [--method {adaptive, merge, squash-merge, fast-forward, detach, abandon}]
-
-ji transfer [target] [--source <NAME>]
-                     [--method {adaptive, merge, fast-forward-target, fast-forward-source,
-                                rebase, merge-squash}]
-
-ji sync [target] [--source <NAME>]
+```sh
+dojo new-branch feat/login       # new change on trunk(); the bookmark comes with the first push
+# ... edit files ...
+dojo push -m "Add the login form"
 ```
 
-`ji sync` has no `--method` flag — it always resolves the two workspaces with whichever strategy fits the sync state (fast-forward if one side is behind, merge if diverged).
+## Bookmark workflows
 
-`ji close` needs a target for the non-disposal methods (`adaptive`, `merge`, `squash-merge`, `fast-forward`): pass a positional `target`, or use `--source <NAME>` (which closes that source into `default@`). A bare `ji close` errors. The disposal methods `detach` and `abandon` take no target.
+The table shows the jj commands that each command runs. Brackets mark commands that run only when they are necessary. `<push>` is the push remote (`sundae` if it exists, else `origin`). `<forge>` is the upstream remote (`origin`).
 
-Operations, diagrams, and when to use each method: [`docs/operations.md`](docs/operations.md).
+| Command | What it does | jj commands |
+|---|---|---|
+| `dojo fetch` | Fetch every remote. Show new, moved, and deleted bookmarks per remote. | `jj git fetch --remote origin --remote sundae` |
+| `dojo branches` (`b`) | One row per bookmark: local, each remote, tracking, ahead/behind, protected. | read only (`jj bookmark list --all-remotes`) |
+| `dojo switch <b>` | Start work on a bookmark. Your edits stay in the old change. | [`jj git fetch ...`] [`jj bookmark track <b> --remote <push>`] `jj new <b>` |
+| `dojo push [<b>]` | Push `@` (or `@-` when `@` is empty) with its bookmark. | [`jj describe <id> --message ...`] [`jj bookmark set <b> --revision @`] `jj git push --remote <push> --bookmark <b>` [`jj new <b>`] [`jj git fetch --remote origin`] |
+| `dojo sync [<b>]` | Bring the forge's new commits into your work, then offer the push. | `jj git fetch ...` `jj rebase --branch <b> --destination <b>@<forge>` |
+| `dojo new-branch <b>` | New change on `trunk()`. The bookmark is created on the first push (or at once with `--now`). | `jj new 'trunk()'` [`jj bookmark create <b> --revision @`] |
+| `dojo status` (`st`) | The current change, its bookmark, the remote state, and the next command. | read only |
+| `dojo pr [<b>]` | Push, then open a pull request (`gh`) or merge request (`glab`). `--checks` shows CI. | the push commands, then `gh pr create --repo o/r --head <b> ...` or `glab mr create --repo g/p --source-branch <b> ...` |
 
-## TUI keybindings
+Global flags: `--json` (a JSON report with every step, for agents and scripts), `--dry-run` (print the commands, change nothing), `-y`/`--yes` (run an offered follow-up without a question). Exit code 2 means that dojo stopped and needs a decision (for example a refused push). Full reference: [docs/cli.md](docs/cli.md).
 
-| Key | Action |
-|---|---|
-| `↑` `↓` | Navigate the workspace list (or graph, if focused) |
-| `→` `←` | Step through a workspace's revision chain |
-| `Enter` | Switch to the selected workspace |
-| `Tab` | Toggle focus between workspace list and commit graph |
-| `n` | New workspace |
-| `x` | Close workspace |
-| `s` | Sync with another workspace |
-| `t` | Transfer changes between workspaces |
-| `v` | Pick a revision to split |
-| `b` | Manage bookmarks |
-| `c` | Copy workspace info to clipboard |
-| `i` | Toggle description / changed-files view |
-| `r` | Cycle sort mode (log order → alphabetical → last modified) |
-| `u` | Update a stale workspace |
-| `o` | Open the jj operation log pane |
-| `Z` / `Y` | Undo / redo ji actions |
-| `?` / `/` | Toggle the help pane |
-| `q` | Quit |
+## The TUI
 
-Full TUI reference including dialog keybindings: [`docs/tui.md`](docs/tui.md).
+`dojo` with no command opens the home view:
+
+- the **bookmarks** (local and per remote) and the **log** graph, side by side on a wide terminal, one at a time (`Tab`) on a narrow one;
+- `Enter` shows the **change detail**: description, files, and the coloured diff;
+- one key per action: `f` fetch, `s` switch, `p` push, `y` sync, `P` pull request, `d` describe, `n` new, `e` edit, `S` squash, `a` abandon, `x` split, `u` undo, `o` operation log, `w` workspaces, `?` help.
+
+Each action first shows a **preview** of the exact commands; `Enter` runs them. When dojo has a follow-up (for example "sync, then push" after a refused push), the result box shows it, and `Enter` runs it. Full reference: [docs/tui.md](docs/tui.md).
+
+## Sundae sessions
+
+A Sundae session is a Linux container in which a coding agent works on repositories. Each repository in a session has two git remotes:
+
+- `sundae`: the Sundae server. You fetch from it and push to it. Sundae forwards each pushed bookmark to the forge in the same push.
+- `origin`: the forge (GitHub or GitLab). Fetch only. A push to `origin` fails on purpose.
+
+dojo knows this layout:
+
+- **Explicit remotes.** The per-repo jj config (which sets `git.push = "sundae"`) is not always visible to the shell, so a plain `jj git push` can pick the wrong remote. dojo never depends on `git.push` or `git.fetch`. It reads the remotes with `jj git remote list` and always passes `--remote`. It never pushes to `origin` when `sundae` exists.
+- **Forwarding.** After a push to `sundae`, dojo fetches `origin` to show the bookmark that Sundae forwarded.
+- **Protected `main`.** Sundae refuses pushes to `main`. dojo stops before the push and offers to push the same change as a new bookmark (`dojo push --change <rev>` or `dojo push --as <name>`). Then open a pull request from it.
+- **"forge `<b>` has commits you lack".** Someone pushed to the forge from outside the session. dojo explains the refusal and offers `dojo sync <b>`: fetch, rebase your commits onto `<b>@origin`, then push. With `--yes`, `dojo sync <b> --yes` does all of it in one command.
+- **Private paths.** Sundae refuses commits that add `AGENTS.md`, `todo.txt`, `.pi/`, `_bmad/`, or `_bmad-output/`. These files live in `refs/sundae/private`. dojo lists the files and the commits that add them. dojo never touches `refs/sundae/private`.
+- **Pushed commits stay as they are.** Sundae refuses a rewritten commit. So after a push of the working-copy change, dojo starts a new empty change on top of it.
+- **Pull requests.** jj leaves git `HEAD` detached, so dojo always passes the branch: `gh pr create --head <b>` or `glab mr create --source-branch <b>`.
+- **Identity.** When jj does not know your name and email, dojo says so once and shows the fix: `jj config set --user user.name "Your Name"` and `jj config set --user user.email "you@example.com"`.
+
+dojo also works in a plain repository with only `origin`: then `origin` is the push remote.
+
+## Workspaces (`dojo ws`)
+
+![The workspace TUI](docs/assets/ji-create.jpg)
+
+The workspace commands come from `ji`. A jj workspace is like a git worktree.
+
+```
+dojo ws tui                          # the workspace TUI (also `w` in the home view)
+dojo ws switch <target>              # switch to a workspace (by name, bookmark, or change ID)
+dojo ws new <bookmark>               # create a new workspace
+dojo ws close [target]               # close a workspace into a target
+dojo ws transfer [target]            # transfer changes between workspaces (both stay open)
+dojo ws sync [target]                # sync two workspaces
+dojo ws ls                           # list workspaces
+```
+
+They create, switch, sync, merge, and clean up workspaces, with per-project hooks and file templates, graph-aware methods (fast-forward, merge, rebase, squash), undo/redo of dojo actions, and (on macOS) Finder-metadata fidelity. The close and transfer dialogs show the jj command sequence before you confirm. See [docs/operations.md](docs/operations.md) and [docs/cli.md](docs/cli.md#workspace-commands-dojo-ws).
 
 ## Configuration
 
-Project config lives at `.config/ji.toml` in the repository root (checked into version control). Generate a starter with `ji init`, then uncomment the sections you need.
+Project config: `.config/dojo.toml` in the repository root (generate it with `dojo init`). User config: `$XDG_CONFIG_HOME/dojo/config.toml` (default `~/.config/dojo/config.toml`). The project file overrides the user file.
 
 ```toml
-# Where new workspaces are created (relative to the repo root).
+# Bookmarks that the push remote refuses (default: ["main"]).
+protected = ["main"]
+# Remotes (defaults: sundae, else origin; and origin).
+# push-remote = "sundae"
+# upstream-remote = "origin"
+
+# Workspaces: where `dojo ws new` creates them, and their hooks.
 workspace-path = "../{{ repo }}.{{ bookmark }}"
 
-# Blocking setup hooks run after workspace creation, in key order.
 [pre-start]
 deps = "uv sync"
-
-# Background hooks spawned after pre-start completes.
-[post-start]
-server = "npm run dev"
-
-# Files generated per workspace.
-[templates]
-".envrc" = 'export PROJECT_ROOT="{{ workspace_path }}"'
 ```
 
-Full field reference, template variables, and hook semantics: [`docs/configuration.md`](docs/configuration.md).
+Full reference: [docs/configuration.md](docs/configuration.md).
 
 ## Documentation
 
 | Page | What it covers |
 |---|---|
-| [docs/installation.md](docs/installation.md) | Prerequisites, build, install, upgrade |
-| [docs/shell-integration.md](docs/shell-integration.md) | The shell wrapper and how to install it |
-| [docs/configuration.md](docs/configuration.md) | Full `.config/ji.toml` reference |
-| [docs/cli.md](docs/cli.md) | Every subcommand and flag |
-| [docs/tui.md](docs/tui.md) | TUI layout, keybindings, dialogs, modes |
-| [docs/operations.md](docs/operations.md) | Sync, transfer, close — diagrams and command sequences |
+| [docs/installation.md](docs/installation.md) | Platforms, release binaries, build from source, uninstall |
+| [docs/cli.md](docs/cli.md) | Every command and flag, with the jj commands it runs |
+| [docs/tui.md](docs/tui.md) | The home view and the workspace view |
+| [docs/configuration.md](docs/configuration.md) | Full `.config/dojo.toml` reference |
+| [docs/shell-integration.md](docs/shell-integration.md) | The shell wrapper for the workspace commands |
+| [docs/operations.md](docs/operations.md) | Workspace sync, transfer, close: diagrams and command sequences |
 | [docs/xattrs.md](docs/xattrs.md) | macOS Finder aliases, xattrs, and hard links across workspace operations |
 | [docs/troubleshooting.md](docs/troubleshooting.md) | Problem / solution pairs |
 
 ## License
 
-MIT
+MIT. See [LICENSE](LICENSE). dojo keeps the copyright notice of the original `ji` project.

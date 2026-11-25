@@ -1,6 +1,6 @@
 # Shell integration
 
-`dojo switch <target>` and the TUI's switch action both change the current shell's working directory. Because `dojo` runs as a child process, it cannot modify the parent shell's cwd directly. A shell wrapper bridges the gap.
+`dojo ws switch <target>` and the TUI's switch action both change the current shell's working directory. Because `dojo` runs as a child process, it cannot modify the parent shell's cwd directly. A shell wrapper bridges the gap.
 
 ## Mechanism
 
@@ -36,7 +36,7 @@ fish autoloads the first `dojo.fish` it finds on `$fish_complete_path`, and the 
 
 After install, start a new shell or source the rc file.
 
-If you run `dojo switch`/`new`/`close` on a terminal and the wrapper isn't installed, `dojo` offers to install it then and there (`[y/N/?]`, configuring the shell you're in plus any other shell with a config). A decline is remembered per shell; `dojo config shell install` re-enables the offer.
+If you run `dojo ws switch`/`new`/`close` on a terminal and the wrapper isn't installed, `dojo` offers to install it then and there (`[y/N/?]`, configuring the shell you're in plus any other shell with a config). A decline is remembered per shell; `dojo config shell install` re-enables the offer.
 
 ## Bypass aliases
 
@@ -63,7 +63,7 @@ if command -v dojo >/dev/null 2>&1; then eval "$(command dojo config shell init)
 
 ## Tab completion
 
-Installing the integration also registers dynamic tab-completion for workspace and bookmark arguments. `dojo switch <TAB>` — and `close`, `transfer`, `sync`, including their `--source` flag — completes live workspace targets; `dojo new <TAB>` completes existing local bookmarks. Each candidate carries a relative last-modified time, and workspace candidates add a status marker: `(2h)` was touched two hours ago, `(2h)[*]` is the current workspace, `(1y)[x]` is orphaned (its directory is gone).
+Installing the integration also registers dynamic tab-completion for workspace and bookmark arguments. `dojo ws switch <TAB>` — and `close`, `transfer`, `sync`, including their `--source` flag — completes live workspace targets; `dojo ws new <TAB>` and the bookmark arguments of `dojo switch`, `push`, `sync`, and `pr` complete local and remote bookmarks. Each candidate carries a relative last-modified time, and workspace candidates add a status marker: `(2h)` was touched two hours ago, `(2h)[*]` is the current workspace, `(1y)[x]` is orphaned (its directory is gone).
 
 zsh and fish show the annotations, ordered most-recent-first (orphaned workspaces last); bash completes plain names. Candidates come from a single non-mutating `jj` query per `<TAB>` under a bounded timeout, so completion never snapshots the working copy or stalls the prompt.
 
@@ -76,7 +76,7 @@ zsh, bash, fish. The shell is detected from the active shell — the one that in
 With the wrapper installed, run:
 
 ```sh
-dojo switch <some-workspace>
+dojo ws switch <some-workspace>
 pwd
 ```
 

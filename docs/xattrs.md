@@ -13,7 +13,7 @@ A Finder alias is a regular file whose content is bookmark data and whose alias-
 
 ## What dojo does
 
-Before an operation that materializes files (`dojo new`, `dojo close`, `dojo transfer`, `dojo sync`), dojo records the Finder-relevant xattrs (`com.apple.FinderInfo`, `com.apple.ResourceFork`) and the hard-link identity of the tracked files in every on-disk workspace. After the operation it restores what can be restored and warns about what cannot:
+Before an operation that materializes files (`dojo ws new`, `dojo ws close`, `dojo ws transfer`, `dojo ws sync`), dojo records the Finder-relevant xattrs (`com.apple.FinderInfo`, `com.apple.ResourceFork`) and the hard-link identity of the tracked files in every on-disk workspace. After the operation it restores what can be restored and warns about what cannot:
 
 - **Identical content** — a materialized file whose bytes match a recorded copy gets that copy's full Finder metadata back. This covers unchanged aliases, aliases carried into a new workspace, and a new alias merged from one workspace into another.
 - **Retargeted alias** — bookmark data whose bytes changed still gets the alias flag back (the flag is content-independent). The old resource fork is not re-attached to new content.

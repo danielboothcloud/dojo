@@ -2,6 +2,8 @@
 
 dojo reads per-project configuration from `.config/dojo.toml` at the repository root. The file is intended to be checked into version control so everyone working on the repo shares the same workspace paths, hooks, and templates.
 
+dojo also reads a user configuration file with the same keys: `$XDG_CONFIG_HOME/dojo/config.toml`, or `~/.config/dojo/config.toml` when `XDG_CONFIG_HOME` is not set (also on macOS). dojo loads the user file first. Then the project file overrides each key that it sets.
+
 ## Generating
 
 ```sh
@@ -15,6 +17,29 @@ The generated file is the annotated template at [`src/dojo.template.toml`](../sr
 
 ## Fields
 
+### `protected` — list of strings, default `["main"]`
+
+Bookmarks that the push remote refuses (for example `main` on a Sundae server). `dojo push` stops before it contacts the server and offers to push the same change under a new bookmark. The server can refuse other bookmarks too: dojo reads the refusal and makes the same offer.
+
+```toml
+protected = ["main", "release"]
+```
+
+### `push-remote` — string, optional
+
+The remote that `dojo push` sends bookmarks to. Default: `sundae` if the repo has that remote, else `origin`, else the only remote.
+
+### `upstream-remote` — string, optional
+
+The forge remote that `dojo sync` rebases onto. Default: `origin` if the repo has that remote, else the push remote.
+
+```toml
+push-remote = "sundae"
+upstream-remote = "origin"
+```
+
+dojo reads the remotes with `jj git remote list` and always passes `--remote` explicitly. It does not use jj's `git.push` or `git.fetch` settings.
+
 ### `repo` — string, optional
 
 Overrides the `{{ repo }}` template variable. If unset or empty, dojo uses the repository directory name (the last path component of the repo root).
@@ -25,7 +50,7 @@ repo = "myproject"
 
 ### `workspace-path` — string
 
-Template for the directory where `dojo new` creates a new workspace. Default:
+Template for the directory where `dojo ws new` creates a new workspace. Default:
 
 ```toml
 workspace-path = "../{{ repo }}.{{ bookmark }}"
@@ -35,7 +60,7 @@ The path is resolved relative to the repository root and expanded with template 
 
 ### `log-template` — string, optional
 
-A [jj template](https://docs.jj-vcs.dev/latest/templates/) passed to `jj log --template` for the TUI's graph pane. If unset, dojo uses the default jj template.
+A [jj template](https://docs.jj-vcs.dev/latest/templates/) passed to `jj log --template` for the log pane of both TUI views. If unset, dojo uses the default jj template.
 
 Guidelines:
 
@@ -62,7 +87,7 @@ concat(
 
 ### `dojo-author` — string, optional
 
-Overrides the author on every revision dojo creates (via `jj metaedit --author` after the revision is made). Format: `"Name <email>"`.
+Overrides the author on every revision that the workspace commands (`dojo ws ...`) create (via `jj metaedit --author` after the revision is made). Format: `"Name <email>"`. The old key name `ji-author` also works.
 
 ```toml
 dojo-author = "Jujutsu Gi <dojo@null.com>"

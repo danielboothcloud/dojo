@@ -2,7 +2,7 @@
 
 ## A workspace operation didn't change my directory
 
-**Symptom:** `dojo switch`/`new`/`close` did its work but the shell's `pwd` did not change; `dojo` printed a `(dojo)::cd …` note.
+**Symptom:** `dojo ws switch`/`new`/`close` did its work but the shell's `pwd` did not change; `dojo` printed a `(dojo)::cd …` note.
 
 **Cause:** `dojo` can only change the parent shell's directory when its wrapper is active. The note says why it couldn't, and what to do:
 
@@ -12,7 +12,7 @@
 - *on-disk integration doesn't match dojo — inspect with `dojo config shell status`, then reinstall or remove the conflicting entry* — the on-disk wrapper drifted, or a conflicting integration was found.
 - *auto-cd isn't supported for `<shell>`* — only zsh, bash, and fish are supported.
 
-A `dojo switch` that can't change directory exits non-zero (you stay in a valid directory). If `dojo close` removed the directory you were standing in and couldn't move you, it prints `current directory was removed — run: cd <root>` — run that to escape the deleted directory.
+A `dojo ws switch` that can't change directory exits non-zero (you stay in a valid directory). If `dojo ws close` removed the directory you were standing in and couldn't move you, it prints `current directory was removed — run: cd <root>` — run that to escape the deleted directory.
 
 See [shell-integration.md](shell-integration.md) for the mechanism and manual installation.
 
@@ -20,7 +20,7 @@ See [shell-integration.md](shell-integration.md) for the mechanism and manual in
 
 ## fish tab-completion shows files instead of workspaces
 
-**Symptom:** in fish, `dojo switch`/`sync`/`transfer <TAB>` completes files and directories from the current directory instead of the workspaces; `dojo <TAB>` (subcommands) still works.
+**Symptom:** in fish, `dojo ws switch`/`sync`/`transfer <TAB>` completes files and directories from the current directory instead of the workspaces; `dojo <TAB>` (subcommands) still works.
 
 **Cause:** a stale or duplicate `~/.config/fish/completions/dojo.fish` — typically written by an older `dojo config shell install` before completions became dynamic — shadows the correct completion. fish autoloads the first `dojo.fish` on `$fish_complete_path`, and the user directory comes first, so an out-of-date file there wins over the dynamic one Homebrew ships in `…/vendor_completions.d/`.
 
@@ -45,17 +45,17 @@ Saved diffs, when the TUI writes them, land in `.dojo/diffs/`.
 
 ## "no workspace matching '<target>'"
 
-**Symptom:** `dojo switch <target>` or a CLI source/target argument errors.
+**Symptom:** `dojo ws switch <target>` or a CLI source/target argument errors.
 
 **Cause:** The target does not match any workspace name, change ID prefix, or bookmark (at-head or behind).
 
-**Fix:** run `dojo ls` to list workspaces and pick a valid name, change ID prefix, or bookmark.
+**Fix:** run `dojo ws ls` to list workspaces and pick a valid name, change ID prefix, or bookmark.
 
 ---
 
 ## "ambiguous target '<target>': matches ..."
 
-**Symptom:** `dojo switch` errors with a list of candidates.
+**Symptom:** `dojo ws switch` errors with a list of candidates.
 
 **Cause:** The target argument is a prefix that matches multiple workspaces (e.g., a 1-char change ID prefix that several workspaces share).
 
@@ -65,7 +65,7 @@ Saved diffs, when the TUI writes them, land in `.dojo/diffs/`.
 
 ## Adaptive operation is unavailable
 
-**Symptom:** `dojo close <target> --method adaptive` or `dojo transfer --method adaptive` fails, or the adaptive entry is missing from the TUI dialog.
+**Symptom:** `dojo ws close <target> --method adaptive` or `dojo ws transfer --method adaptive` fails, or the adaptive entry is missing from the TUI dialog.
 
 **Cause:** The sync mode does not support adaptive resolution:
 
@@ -100,11 +100,11 @@ See [operations.md](operations.md#sync-mode-detection).
 
 ## Workspace directory not removed after close
 
-**Symptom:** `dojo close` succeeds but the workspace directory is still on disk.
+**Symptom:** `dojo ws close` succeeds but the workspace directory is still on disk.
 
 **Cause:** `--delete-files` was not passed (CLI) or `k` was not toggled (TUI), or the directory was already missing.
 
-**Fix:** pass `--delete-files` on the next close, or `rm -rf <path>` manually. `dojo close` refuses to delete the directory if it cannot locate it.
+**Fix:** pass `--delete-files` on the next close, or `rm -rf <path>` manually. `dojo ws close` refuses to delete the directory if it cannot locate it.
 
 ---
 
@@ -134,9 +134,9 @@ See [operations.md](operations.md#sync-mode-detection).
 
 ## Create errors with "bookmark already exists"
 
-**Symptom:** `dojo new <bookmark>` fails because a bookmark with that name already exists elsewhere in the repo.
+**Symptom:** `dojo ws new <bookmark>` fails because a bookmark with that name already exists elsewhere in the repo.
 
-**Fix:** choose a different bookmark name, or delete the existing bookmark first (`jj bookmark delete <name>`). If you wanted to resume work on that bookmark instead of creating a new workspace, use `dojo new <bookmark> --create-if-necessary`, which switches to an existing workspace when the bookmark name already matches one.
+**Fix:** choose a different bookmark name, or delete the existing bookmark first (`jj bookmark delete <name>`). If you wanted to resume work on that bookmark instead of creating a new workspace, use `dojo ws new <bookmark> --create-if-necessary`, which switches to an existing workspace when the bookmark name already matches one.
 
 ---
 

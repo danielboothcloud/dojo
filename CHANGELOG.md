@@ -1,5 +1,27 @@
 # Changelog
 
+## Unreleased (dojo)
+
+dojo is a fork of [daeh/jujutsu-gi](https://github.com/daeh/jujutsu-gi) (`ji`). The entries below 0.1.6 are the history of `ji`.
+
+### Changed
+
+- Renamed `ji` to `dojo`: the binary, `.config/dojo.toml`, `DOJO_DIRECTIVE_FILE`, `DOJO_LOG`, `.dojo/`, and the shell wrappers. The config key `ji-author` still works as an alias of `dojo-author`.
+- The workspace commands moved under `dojo ws` (`dojo ws switch`, `new`, `close`, `transfer`, `sync`, `ls`). The workspace TUI opens with `dojo ws tui`.
+- `dojo` with no command opens the new home view.
+- Linux support: the shell detection reads `/proc`, and the macOS-only dependencies (`libproc`, `xattr`) are only built on macOS.
+- Bookmark completion lists local and remote bookmarks.
+
+### Added
+
+- Bookmark workflows that print each jj command before it runs: `dojo fetch`, `dojo branches`, `dojo switch`, `dojo push`, `dojo sync`, `dojo new-branch`, `dojo status`, and `dojo pr` (`gh` or `glab`).
+- Global flags `--json`, `--dry-run`, and `-y/--yes`; exit code 2 when dojo needs a decision.
+- Sundae support: explicit `--remote` on every fetch and push (no dependency on jj's `git.push` / `git.fetch`), explanations and one-step fixes for the "protected", "forge has commits you lack", and private-path refusals, and a fetch of `origin` after each push.
+- After a push of the working-copy change, `dojo push` starts a new empty change on top of it, so the pushed commit stays unchanged.
+- A user config file: `$XDG_CONFIG_HOME/dojo/config.toml`. New keys: `protected` (default `["main"]`), `push-remote`, and `upstream-remote`.
+- Home TUI: bookmarks and log panes, the change detail with the coloured diff, and keys for fetch, switch, push, sync, pr, describe, new, edit, squash, abandon, split, undo, and the operation log. Each key shows a preview of the commands first.
+- CI on Linux (latest jj and jj 0.47) and macOS; a release workflow with static musl binaries for x86_64 and aarch64 Linux and a `SHA256SUMS` file.
+
 
 ## 0.1.6 - 2026-07-28
 

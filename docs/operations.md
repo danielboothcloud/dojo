@@ -1,11 +1,11 @@
 # Operations
 
-`dojo sync`, `dojo transfer`, and `dojo close` are the three commands that combine two workspaces. This page documents the mode detection, the concrete methods, and the jj command sequences each method runs.
+`dojo ws sync`, `dojo ws transfer`, and `dojo ws close` are the three commands that combine two workspaces. This page documents the mode detection, the concrete methods, and the jj command sequences each method runs.
 
 - [Terminology](#terminology)
 - [Sync mode detection](#sync-mode-detection)
 - [Adaptive resolution](#adaptive-resolution)
-- [`dojo sync`](#dojo-sync)
+- [`dojo ws sync`](#dojo-ws-sync)
 - [Transfer methods](#transfer-methods)
 - [Close methods](#close-methods)
 - [Bookmark actions on close](#bookmark-actions-on-close)
@@ -13,13 +13,13 @@
 
 ## Terminology
 
-- **Default workspace** — the workspace at the repository root, addressable as `default@`. It serves the role of the `main`/`master` branch in git. `transfer` and `sync` default their `target` argument to this workspace when none is given; `close` does so only with `--source` (a bare non-disposal `dojo close` requires an explicit target).
-- **Source** / **target** — in `dojo close`, `dojo transfer`, and `dojo sync`, the source is the workspace the operation is run *from* (the current working directory unless `--source` overrides), and the target is the workspace the operation is run *against* (`default@` when no positional `target` is given — though a bare non-disposal `dojo close` requires an explicit target). By convention, source is a feature workspace and target is `default@`.
+- **Default workspace** — the workspace at the repository root, addressable as `default@`. It serves the role of the `main`/`master` branch in git. `transfer` and `sync` default their `target` argument to this workspace when none is given; `close` does so only with `--source` (a bare non-disposal `dojo ws close` requires an explicit target).
+- **Source** / **target** — in `dojo ws close`, `dojo ws transfer`, and `dojo ws sync`, the source is the workspace the operation is run *from* (the current working directory unless `--source` overrides), and the target is the workspace the operation is run *against* (`default@` when no positional `target` is given — though a bare non-disposal `dojo ws close` requires an explicit target). By convention, source is a feature workspace and target is `default@`.
 - **Step-forward commit** — an empty commit dojo inserts on a workspace's `@` to keep two workspaces from sharing the same working-copy revision. Description: `(dojo::step-forward)`. Two workspaces must never have the same `@`, so dojo adds these after any operation that would otherwise produce a shared `@`.
 - **Trivial head** — a graph head that is empty (no file changes), single-parent (not a merge), and has a "trivial" description. A description counts as trivial if it is empty, is a single word with no whitespace, starts with `(dojo::` (on a single line), or matches jj's configured `templates.new_description` exactly. Step-forward commits and `(dojo::fast-forward)` commits are both trivial by this definition.
 - **Effective head** — a workspace's line-of-work tip, with a trivial `@` skipped. If `@` is a trivial head, the effective head is `@-`; otherwise it is `@`. dojo compares effective heads when deciding whether two workspaces are in sync.
 - **Last common ancestor (LCA)** — `latest(fork_point(src_eff | tgt_eff))` — the most recent revision that is an ancestor of both effective heads.
-- **Singular bookmark** — the bookmark whose name matches the workspace's `{{ bookmark }}` template value (derived from `workspace-path` and the workspace name). dojo creates it on `dojo new` and manages it automatically during close/transfer/sync.
+- **Singular bookmark** — the bookmark whose name matches the workspace's `{{ bookmark }}` template value (derived from `workspace-path` and the workspace name). dojo creates it on `dojo ws new` and manages it automatically during close/transfer/sync.
 - **Adaptive method** — `--method adaptive` (the default for `close` and `transfer`). dojo inspects the [sync mode](#sync-mode-detection) and dispatches to a concrete method; see [adaptive resolution](#adaptive-resolution).
 - **Disposal method** — a close method that does not require a target: `detach` and `abandon`. Both forget the source workspace; `abandon` additionally deletes its revisions.
 
@@ -62,7 +62,7 @@ The `SyncModeInfo` captures the repo's operation head at detection time. When th
 
 ## Adaptive resolution
 
-**Adaptive transfer** (`dojo transfer --method adaptive`):
+**Adaptive transfer** (`dojo ws transfer --method adaptive`):
 
 | Sync mode | Concrete method |
 |---|---|
@@ -71,7 +71,7 @@ The `SyncModeInfo` captures the repo's operation head at detection time. When th
 | `Diverged` | `merge` |
 | `InSync` | errors: `adaptive merge unavailable for current sync state` |
 
-**Adaptive close** (`dojo close <target> --method adaptive`):
+**Adaptive close** (`dojo ws close <target> --method adaptive`):
 
 | Sync mode | Concrete method |
 |---|---|
@@ -82,13 +82,13 @@ The `SyncModeInfo` captures the repo's operation head at detection time. When th
 
 (`TargetOnly` is an error for close because the source has no new work to move into the target — there is nothing to close.)
 
-## `dojo sync`
+## `dojo ws sync`
 
 ```
-dojo sync [target] [--source <NAME>]
+dojo ws sync [target] [--source <NAME>]
 ```
 
-`dojo sync` reconciles two workspaces; both remain open. It has no `--method` flag — the strategy is always picked from the [sync mode](#sync-mode-detection):
+`dojo ws sync` reconciles two workspaces; both remain open. It has no `--method` flag — the strategy is always picked from the [sync mode](#sync-mode-detection):
 
 | Mode | Action |
 |---|---|
@@ -97,18 +97,18 @@ dojo sync [target] [--source <NAME>]
 | `TargetOnly` | fast-forward source to target's effective head, then step target forward |
 | `Diverged` | create a merge commit in the source workspace with both effective heads as parents, then step both workspaces forward past the merge |
 
-For the command sequences and diagrams, see the corresponding transfer methods ([fast-forward-target](#transfer-fast-forward-target), [fast-forward-source](#transfer-fast-forward-source), [merge](#transfer-merge)). `dojo sync`'s fast-forward steps the *ahead* side forward after the behind side catches up, so neither workspace is left sitting on the other's `@`.
+For the command sequences and diagrams, see the corresponding transfer methods ([fast-forward-target](#transfer-fast-forward-target), [fast-forward-source](#transfer-fast-forward-source), [merge](#transfer-merge)). `dojo ws sync`'s fast-forward steps the *ahead* side forward after the behind side catches up, so neither workspace is left sitting on the other's `@`.
 
 ---
 
 ## Transfer methods
 
-`dojo transfer` reconciles two workspaces; both remain open. Adaptive picks a concrete method from the sync mode; you can also pass a concrete method explicitly.
+`dojo ws transfer` reconciles two workspaces; both remain open. Adaptive picks a concrete method from the sync mode; you can also pass a concrete method explicitly.
 
 ### Transfer: merge
 
 ```
-dojo transfer [target] --method merge
+dojo ws transfer [target] --method merge
 ```
 
 Create a merge commit whose parents are the two effective heads, then step both workspaces forward past the merge.
@@ -142,7 +142,7 @@ s@:      X → Y → Z ↗   ↘ Ns
 ### Transfer: fast-forward-target
 
 ```
-dojo transfer [target] --method fast-forward-target
+dojo ws transfer [target] --method fast-forward-target
 ```
 
 Fast-forward the target to the source's effective head. The source is stepped forward so that the two workspaces do not share `@`.
@@ -174,7 +174,7 @@ s@:              ↳ Ns
 ### Transfer: fast-forward-source
 
 ```
-dojo transfer [target] --method fast-forward-source
+dojo ws transfer [target] --method fast-forward-source
 ```
 
 Mirror of `fast-forward-target`: fast-forward the source to the target's effective head, then step the target forward. Adaptive chooses it when the sync mode is `TargetOnly`. Forcing it in `SourceOnly` or `Diverged` leaves the source's previous chain as an anonymous branch.
@@ -192,7 +192,7 @@ jj abandon -- {src_trivial}             # only if the source had a trivial head 
 ### Transfer: rebase
 
 ```
-dojo transfer [target] --method rebase
+dojo ws transfer [target] --method rebase
 ```
 
 Rebase the source's unique chain onto the target's effective head, producing linear history. Only the target is stepped forward; the source stays at the rebased position of its original effective head.
@@ -225,7 +225,7 @@ After: the source chain is replayed on top of `C` (`tgt_eff`). `src@` is at `Z'`
 ### Transfer: merge-squash
 
 ```
-dojo transfer [target] --method merge-squash
+dojo ws transfer [target] --method merge-squash
 ```
 
 Squash the source's unique chain into a single commit (change ID of the first unique commit is preserved), then create a confluence merge between the squashed commit and the target's effective head, then step both workspaces forward.
@@ -264,7 +264,7 @@ s@:      X* ---↗ ↳ Ns
 ### Transfer: adaptive
 
 ```
-dojo transfer [target] --method adaptive     # default
+dojo ws transfer [target] --method adaptive     # default
 ```
 
 See [adaptive resolution](#adaptive-resolution). Resolves to `fast-forward-target`, `fast-forward-source`, or `merge` based on the sync mode.
@@ -273,12 +273,12 @@ See [adaptive resolution](#adaptive-resolution). Resolves to `fast-forward-targe
 
 ## Close methods
 
-`dojo close` integrates the source's work into the target (or, for `detach`/`abandon`, discards it) and then forgets the source workspace.
+`dojo ws close` integrates the source's work into the target (or, for `detach`/`abandon`, discards it) and then forgets the source workspace.
 
 ### Close: merge
 
 ```
-dojo close <target> --method merge
+dojo ws close <target> --method merge
 ```
 
 Forget the source, then create a merge commit in the target workspace whose parents are the two effective heads. Unlike `transfer --method merge`, there is no step-forward after the merge — the target's `@` is exactly the merge commit.
@@ -312,7 +312,7 @@ t@:  A → B → C  →  M
 ### Close: squash-merge
 
 ```
-dojo close <target> --method squash-merge
+dojo ws close <target> --method squash-merge
 ```
 
 Forget the source, squash its unique chain, then merge the squashed commit with the target. The target's `@` is the merge commit.
@@ -345,7 +345,7 @@ t@:  A → B → C → M
 ### Close: fast-forward
 
 ```
-dojo close <target> --method fast-forward
+dojo ws close <target> --method fast-forward
 ```
 
 Forget the source, then fast-forward the target to the source's effective head.
@@ -378,7 +378,7 @@ t@:  A → X → Y → Z
 ### Close: detach
 
 ```
-dojo close --method detach
+dojo ws close --method detach
 ```
 
 Forget the source workspace without touching meaningful revisions. After applying the selected bookmark policy, dojo abandons the unreferenced trivial heads it skipped when resolving the effective head. A trivial head retained by a non-singular `NoAction` bookmark remains in the graph.
@@ -411,7 +411,7 @@ The meaningful source revisions (`X → Y → Z`) still live in the graph as an 
 ### Close: abandon
 
 ```
-dojo close --method abandon
+dojo ws close --method abandon
 ```
 
 Forget the source workspace *and* abandon every revision in its chain. Use this to throw away work entirely.
@@ -441,7 +441,7 @@ t@: A → B → C    (unchanged)
 ### Close: adaptive
 
 ```
-dojo close <target> --method adaptive     # default
+dojo ws close <target> --method adaptive     # default
 ```
 
 See [adaptive resolution](#adaptive-resolution). Resolves to `fast-forward` or `merge` based on the sync mode. `InSync` and `TargetOnly` are unavailable.
@@ -459,13 +459,13 @@ A workspace usually carries one or more bookmarks. dojo splits them into two gro
 
 | Operation | Source singular bookmark | Target singular bookmark |
 |---|---|---|
-| `dojo sync` (Done) | advance to source's `@` | advance to target's `@` |
-| `dojo transfer` (any method, Done) | advance to source's `@` | advance to target's `@` |
-| `dojo close --method merge` | advance to source's effective head | advance to target's `@` |
-| `dojo close --method squash-merge` | advance to source's effective head | advance to target's `@` |
-| `dojo close --method fast-forward` | advance to source's effective head | advance to target's `@` |
-| `dojo close --method detach` | advance to source's effective head | not touched |
-| `dojo close --method abandon` | **deleted** | not touched |
+| `dojo ws sync` (Done) | advance to source's `@` | advance to target's `@` |
+| `dojo ws transfer` (any method, Done) | advance to source's `@` | advance to target's `@` |
+| `dojo ws close --method merge` | advance to source's effective head | advance to target's `@` |
+| `dojo ws close --method squash-merge` | advance to source's effective head | advance to target's `@` |
+| `dojo ws close --method fast-forward` | advance to source's effective head | advance to target's `@` |
+| `dojo ws close --method detach` | advance to source's effective head | not touched |
+| `dojo ws close --method abandon` | **deleted** | not touched |
 
 ### Non-singular bookmarks
 
@@ -477,7 +477,7 @@ The **TUI** close dialog exposes a per-close bookmark action for non-singular bo
 | `Advance` | Move every affected bookmark to the target workspace's change ID |
 | `Delete` | Delete every affected bookmark |
 
-The **CLI** (`dojo close`) always uses `NoAction` for non-singular bookmarks — there is no CLI flag to choose `Advance` or `Delete`. If you want those actions on non-singular bookmarks as part of a CLI close, run the equivalent `jj bookmark set` / `jj bookmark delete` commands after `dojo close` returns.
+The **CLI** (`dojo ws close`) always uses `NoAction` for non-singular bookmarks — there is no CLI flag to choose `Advance` or `Delete`. If you want those actions on non-singular bookmarks as part of a CLI close, run the equivalent `jj bookmark set` / `jj bookmark delete` commands after `dojo ws close` returns.
 
 ---
 
@@ -496,7 +496,7 @@ Because dojo runs most jj calls with `--ignore-working-copy` (see [the note abov
 
 ### Delete files (close only)
 
-`dojo close --delete-files` (CLI) or the `k` toggle in the TUI close dialog triggers `rm -rf` on the source workspace directory *after* the jj-level close succeeds. In the TUI this is gated behind an additional confirmation prompt; in the CLI it runs unconditionally. If the deleted directory was the current working directory, dojo writes a `cd <repo_root>` directive to the [shell wrapper](shell-integration.md) so the parent shell leaves the deleted directory.
+`dojo ws close --delete-files` (CLI) or the `k` toggle in the TUI close dialog triggers `rm -rf` on the source workspace directory *after* the jj-level close succeeds. In the TUI this is gated behind an additional confirmation prompt; in the CLI it runs unconditionally. If the deleted directory was the current working directory, dojo writes a `cd <repo_root>` directive to the [shell wrapper](shell-integration.md) so the parent shell leaves the deleted directory.
 
 ### Author override
 
