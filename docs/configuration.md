@@ -1,23 +1,23 @@
 # Configuration
 
-ji reads per-project configuration from `.config/ji.toml` at the repository root. The file is intended to be checked into version control so everyone working on the repo shares the same workspace paths, hooks, and templates.
+dojo reads per-project configuration from `.config/dojo.toml` at the repository root. The file is intended to be checked into version control so everyone working on the repo shares the same workspace paths, hooks, and templates.
 
 ## Generating
 
 ```sh
-ji init                # generate .config/ji.toml
-ji config init         # same
+dojo init                # generate .config/dojo.toml
+dojo config init         # same
 ```
 
-The generated file is the annotated template at [`src/ji.template.toml`](../src/ji.template.toml) with every field commented out. Uncomment and fill in what you need.
+The generated file is the annotated template at [`src/dojo.template.toml`](../src/dojo.template.toml) with every field commented out. Uncomment and fill in what you need.
 
-`ji init` refuses to overwrite an existing file.
+`dojo init` refuses to overwrite an existing file.
 
 ## Fields
 
 ### `repo` — string, optional
 
-Overrides the `{{ repo }}` template variable. If unset or empty, ji uses the repository directory name (the last path component of the repo root).
+Overrides the `{{ repo }}` template variable. If unset or empty, dojo uses the repository directory name (the last path component of the repo root).
 
 ```toml
 repo = "myproject"
@@ -25,7 +25,7 @@ repo = "myproject"
 
 ### `workspace-path` — string
 
-Template for the directory where `ji new` creates a new workspace. Default:
+Template for the directory where `dojo new` creates a new workspace. Default:
 
 ```toml
 workspace-path = "../{{ repo }}.{{ bookmark }}"
@@ -35,11 +35,11 @@ The path is resolved relative to the repository root and expanded with template 
 
 ### `log-template` — string, optional
 
-A [jj template](https://docs.jj-vcs.dev/latest/templates/) passed to `jj log --template` for the TUI's graph pane. If unset, ji uses the default jj template.
+A [jj template](https://docs.jj-vcs.dev/latest/templates/) passed to `jj log --template` for the TUI's graph pane. If unset, dojo uses the default jj template.
 
 Guidelines:
 
-- Every revision in the graph pane must render to the same number of lines. ji uses a fixed line count per revision to line up its own inline annotations (short change IDs, workspace markers) against the rendered graph.
+- Every revision in the graph pane must render to the same number of lines. dojo uses a fixed line count per revision to line up its own inline annotations (short change IDs, workspace markers) against the rendered graph.
 - Put a constant number of `\n` characters at the top level of the template. Avoid `if(...)` blocks that emit conditional newlines — those change the per-revision line count and misalign the annotations.
 
 Example:
@@ -60,19 +60,19 @@ concat(
 '''
 ```
 
-### `ji-author` — string, optional
+### `dojo-author` — string, optional
 
-Overrides the author on every revision ji creates (via `jj metaedit --author` after the revision is made). Format: `"Name <email>"`.
+Overrides the author on every revision dojo creates (via `jj metaedit --author` after the revision is made). Format: `"Name <email>"`.
 
 ```toml
-ji-author = "Jujutsu Gi <ji@null.com>"
+dojo-author = "Jujutsu Gi <dojo@null.com>"
 ```
 
-This isolates ji-generated helper revisions — such as the empty "step-forward" commits ji inserts to keep workspaces from sharing `@`, or the merge/fast-forward markers from close and transfer operations — from your personal author identity, so that `jj log --filter 'author(me)'` stays focused on your work. See [operations.md](operations.md#terminology) for what these helper revisions look like.
+This isolates dojo-generated helper revisions — such as the empty "step-forward" commits dojo inserts to keep workspaces from sharing `@`, or the merge/fast-forward markers from close and transfer operations — from your personal author identity, so that `jj log --filter 'author(me)'` stays focused on your work. See [operations.md](operations.md#terminology) for what these helper revisions look like.
 
 ### `preserve-finder-xattrs` — bool, default `true`
 
-jj stores only file content and mode; whenever it materializes working-copy files it strips macOS Finder metadata (`com.apple.FinderInfo`, `com.apple.ResourceFork`), which breaks Finder aliases. ji restores that metadata after its workspace operations. Set to `false` to disable the restore writes — the fidelity warnings are still reported.
+jj stores only file content and mode; whenever it materializes working-copy files it strips macOS Finder metadata (`com.apple.FinderInfo`, `com.apple.ResourceFork`), which breaks Finder aliases. dojo restores that metadata after its workspace operations. Set to `false` to disable the restore writes — the fidelity warnings are still reported.
 
 ```toml
 preserve-finder-xattrs = false
@@ -86,7 +86,7 @@ Two hook tables, both keyed by hook name and mapping to a shell command. Command
 
 ### `[pre-start]` — blocking, sequential, fail-fast
 
-Runs after workspace creation, before `ji` returns (CLI) or before the TUI switches focus to the new workspace. Hooks run in key order (BTreeMap — alphabetical). A non-zero exit aborts subsequent hooks.
+Runs after workspace creation, before `dojo` returns (CLI) or before the TUI switches focus to the new workspace. Hooks run in key order (BTreeMap — alphabetical). A non-zero exit aborts subsequent hooks.
 
 ```toml
 [pre-start]
@@ -102,7 +102,7 @@ Use for: dependency installation, file rewrites, anything the workspace needs be
 
 ### `[post-start]` — fire-and-forget, background
 
-Spawned in the background after `pre-start` completes. ji does not wait for them and does not collect their exit codes.
+Spawned in the background after `pre-start` completes. dojo does not wait for them and does not collect their exit codes.
 
 ```toml
 [post-start]
@@ -111,7 +111,7 @@ server = "npm run dev"
 
 Use for: dev servers, watchers, long-running processes.
 
-Because post-start hooks are not tracked, a background process started this way will keep running after you close the workspace — ji has no handle to stop it. If you need lifecycle-managed processes, run them under a supervisor (`launchd`, `tmux`, a project runner). See [troubleshooting.md](troubleshooting.md#background-hooks-outlive-a-closed-workspace).
+Because post-start hooks are not tracked, a background process started this way will keep running after you close the workspace — dojo has no handle to stop it. If you need lifecycle-managed processes, run them under a supervisor (`launchd`, `tmux`, a project runner). See [troubleshooting.md](troubleshooting.md#background-hooks-outlive-a-closed-workspace).
 
 ## File templates
 
@@ -150,7 +150,7 @@ Template variables are applied by **string substitution only** — they are not 
 ```toml
 [pre-start]
 # Good — the value is substituted into the command string at expansion time.
-touch_marker = "echo {{ change_id }} > .ji/created-at"
+touch_marker = "echo {{ change_id }} > .dojo/created-at"
 
 # Will not work — $workspace_path is not set in the hook's environment.
 bad = "cd $workspace_path && ls"
@@ -158,7 +158,7 @@ bad = "cd $workspace_path && ls"
 
 ## Template validation
 
-ji validates every template string at config load time. Two warning kinds are produced:
+dojo validates every template string at config load time. Two warning kinds are produced:
 
 - **Unknown variable** — `{{ foo }}` where `foo` is not in the table above
 - **Malformed delimiter** — e.g., `{{foo}}` (missing space), `{ foo }`, unclosed `{{`
@@ -179,8 +179,8 @@ repo = "myproject"
 # Put new workspaces next to the main checkout, named by bookmark.
 workspace-path = "../{{ repo }}.{{ bookmark }}"
 
-# Author override for ji-generated helper revisions.
-ji-author = "Jujutsu Gi <ji@null.com>"
+# Author override for dojo-generated helper revisions.
+dojo-author = "Jujutsu Gi <dojo@null.com>"
 
 # Custom graph template for the TUI.
 log-template = '''

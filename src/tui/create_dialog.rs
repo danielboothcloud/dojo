@@ -591,7 +591,7 @@ mod tests {
         let values = dialog.values();
 
         assert_eq!(values.bookmark, "x");
-        assert!(dialog.path.is_empty());
+        assert_eq!(dialog.path, "");
         assert_eq!(values.path, "/workspaces/repo/x");
     }
 

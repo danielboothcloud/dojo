@@ -7,8 +7,8 @@ use clap::Parser;
 use std::io::IsTerminal;
 use std::path::{Path, PathBuf};
 
-use ji::cli::{Cli, Commands, ConfigCommands, ShellCommands};
-use ji::{commands, config, jujutsu, operations, shell, subprocess_log, text_utils, tui};
+use dojo::cli::{Cli, Commands, ConfigCommands, ShellCommands};
+use dojo::{commands, config, jujutsu, operations, shell, subprocess_log, text_utils, tui};
 
 fn main() -> anyhow::Result<()> {
     // Dynamic shell completion. Capture the shell name before `try_complete`
@@ -16,8 +16,8 @@ fn main() -> anyhow::Result<()> {
     // handle any completion request fail-soft and before any jj/logger/cd-
     // directive work runs (so completion never snapshots or writes a directive).
     // `try_complete` (not `complete()`) so an engine error can't `e.exit()`.
-    ji::completion::capture_shell(std::env::var("COMPLETE").ok());
-    match clap_complete::env::CompleteEnv::with_factory(ji::cli::completion_command)
+    dojo::completion::capture_shell(std::env::var("COMPLETE").ok());
+    match clap_complete::env::CompleteEnv::with_factory(dojo::cli::completion_command)
         .try_complete(std::env::args_os(), std::env::current_dir().ok().as_deref())
     {
         Ok(true) => return Ok(()), // completion handled
@@ -134,7 +134,7 @@ fn main() -> anyhow::Result<()> {
                 revisions: &revisions,
                 workspace_path_template: &cfg.workspace_path,
                 repo_name: &repo_name,
-                author: cfg.ji_author.as_deref(),
+                author: cfg.dojo_author.as_deref(),
                 preserve_finder_xattrs: cfg.preserve_finder_xattrs,
             };
 
@@ -148,15 +148,15 @@ fn main() -> anyhow::Result<()> {
                 );
             }
             if !result.warnings.is_empty() {
-                eprintln!("(ji)::warning: {}", result.warnings.join("; "));
+                eprintln!("(dojo)::warning: {}", result.warnings.join("; "));
             }
             if !result.stale_warnings.is_empty() {
-                eprintln!("(ji)::stale: {}", result.stale_warnings.join(", "));
+                eprintln!("(dojo)::stale: {}", result.stale_warnings.join(", "));
             }
             if let Some(remove_path) = result.pending_remove_path {
-                eprintln!("(ji)::removing {}", remove_path.display());
+                eprintln!("(dojo)::removing {}", remove_path.display());
                 if let Err(e) = std::fs::remove_dir_all(&remove_path) {
-                    eprintln!("(ji)::removing failed: {e}");
+                    eprintln!("(dojo)::removing failed: {e}");
                 }
             }
 
@@ -204,7 +204,7 @@ fn main() -> anyhow::Result<()> {
                 method,
                 workspace_path_template: &cfg.workspace_path,
                 repo_name: &repo_name,
-                author: cfg.ji_author.as_deref(),
+                author: cfg.dojo_author.as_deref(),
                 preserve_finder_xattrs: cfg.preserve_finder_xattrs,
             };
 
@@ -212,14 +212,14 @@ fn main() -> anyhow::Result<()> {
 
             if !result.post_errors.is_empty() {
                 for error in &result.post_errors {
-                    eprintln!("(ji)::error: {}", error.display_block());
+                    eprintln!("(dojo)::error: {}", error.display_block());
                 }
             }
             if !result.warnings.is_empty() {
-                eprintln!("(ji)::warning: {}", result.warnings.join("; "));
+                eprintln!("(dojo)::warning: {}", result.warnings.join("; "));
             }
             if !result.stale_warnings.is_empty() {
-                eprintln!("(ji)::stale: {}", result.stale_warnings.join(", "));
+                eprintln!("(dojo)::stale: {}", result.stale_warnings.join(", "));
             }
 
             Ok(())
@@ -251,17 +251,17 @@ fn main() -> anyhow::Result<()> {
                 &tgt_path,
                 &cfg.workspace_path,
                 &repo_name,
-                cfg.ji_author.as_deref(),
+                cfg.dojo_author.as_deref(),
                 cfg.preserve_finder_xattrs,
             )?;
 
             match outcome {
                 operations::SyncOutcome::AlreadyInSync => {
-                    eprintln!("(ji)::sync already in sync");
+                    eprintln!("(dojo)::sync already in sync");
                 }
                 operations::SyncOutcome::Done { warnings } => {
                     for w in &warnings {
-                        eprintln!("(ji)::sync warning: {w}");
+                        eprintln!("(dojo)::sync warning: {w}");
                     }
                 }
             }
@@ -272,11 +272,11 @@ fn main() -> anyhow::Result<()> {
         Some(Commands::Ls) => cmd_ls(),
         Some(Commands::Init) => cmd_init(),
         Some(Commands::Hook) => {
-            eprintln!("(ji)::hook not yet implemented");
+            eprintln!("(dojo)::hook not yet implemented");
             Ok(())
         }
         Some(Commands::Config { command }) => match command {
-            // `ji config init` is an alias of `ji init`; route through the
+            // `dojo config init` is an alias of `dojo init`; route through the
             // same handler so behavior can't diverge.
             ConfigCommands::Init => cmd_init(),
             ConfigCommands::Shell {
@@ -336,7 +336,7 @@ fn main() -> anyhow::Result<()> {
     if let Err(ref e) = result {
         if jujutsu::is_stale_error(e) {
             eprintln!(
-                "(ji)::stale working copy is stale — another tool modified the repo.\n\
+                "(dojo)::stale working copy is stale — another tool modified the repo.\n\
                  Fix with: jj workspace update-stale"
             );
             std::process::exit(1);
@@ -396,7 +396,7 @@ fn resolve_src_tgt(
 
 fn cmd_init() -> anyhow::Result<()> {
     // Write to the default workspace root, where config is loaded from, so
-    // the template lands where `ji` will read it regardless of which
+    // the template lands where `dojo` will read it regardless of which
     // workspace the command is invoked from.
     let ws_root = jujutsu::workspace_root()?;
     config::create_config(&ws_root)

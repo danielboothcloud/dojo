@@ -51,7 +51,7 @@ pub fn create(
         revision,
         ws_path,
         msg,
-        config.ji_author.as_deref(),
+        config.dojo_author.as_deref(),
     )?;
 
     // Resolve the legitimate stale state created in the source workspace by

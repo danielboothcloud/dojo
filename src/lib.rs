@@ -9,6 +9,7 @@ pub mod hooks;
 pub mod jj_utils;
 pub mod jujutsu;
 pub mod operations;
+pub(crate) mod procinfo;
 pub mod shell;
 pub mod subprocess_log;
 pub mod text_utils;

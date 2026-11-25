@@ -2,17 +2,17 @@
 
 ## A workspace operation didn't change my directory
 
-**Symptom:** `ji switch`/`new`/`close` did its work but the shell's `pwd` did not change; `ji` printed a `(ji)::cd …` note.
+**Symptom:** `dojo switch`/`new`/`close` did its work but the shell's `pwd` did not change; `dojo` printed a `(dojo)::cd …` note.
 
-**Cause:** `ji` can only change the parent shell's directory when its wrapper is active. The note says why it couldn't, and what to do:
+**Cause:** `dojo` can only change the parent shell's directory when its wrapper is active. The note says why it couldn't, and what to do:
 
-- *enable auto-cd with: `ji config shell install`* — the wrapper isn't installed. On a terminal, `ji` offers to install it right there (`[y/N/?]`); declining is remembered per shell, and `ji config shell install` re-enables it.
-- *installed but wasn't active for this command … — diagnose with: `ji config shell status`* — the session started before install, or you ran `command ji` / a full path, which bypasses the wrapper.
-- *invoke `ji` as a bare command … — diagnose with: `ji config shell status`* — `ji` was run via a path or `command ji`, so the wrapper didn't intercept it. A `ji` **alias** pointing at the binary (e.g. `alias ji=/opt/homebrew/bin/ji`) causes this too; `ji config shell status` lists any such bypass alias or `function ji` shadowing the wrapper — remove it for auto-cd to work.
-- *on-disk integration doesn't match ji — inspect with `ji config shell status`, then reinstall or remove the conflicting entry* — the on-disk wrapper drifted, or a conflicting integration was found.
+- *enable auto-cd with: `dojo config shell install`* — the wrapper isn't installed. On a terminal, `dojo` offers to install it right there (`[y/N/?]`); declining is remembered per shell, and `dojo config shell install` re-enables it.
+- *installed but wasn't active for this command … — diagnose with: `dojo config shell status`* — the session started before install, or you ran `command dojo` / a full path, which bypasses the wrapper.
+- *invoke `dojo` as a bare command … — diagnose with: `dojo config shell status`* — `dojo` was run via a path or `command dojo`, so the wrapper didn't intercept it. A `dojo` **alias** pointing at the binary (e.g. `alias dojo=/opt/homebrew/bin/dojo`) causes this too; `dojo config shell status` lists any such bypass alias or `function dojo` shadowing the wrapper — remove it for auto-cd to work.
+- *on-disk integration doesn't match dojo — inspect with `dojo config shell status`, then reinstall or remove the conflicting entry* — the on-disk wrapper drifted, or a conflicting integration was found.
 - *auto-cd isn't supported for `<shell>`* — only zsh, bash, and fish are supported.
 
-A `ji switch` that can't change directory exits non-zero (you stay in a valid directory). If `ji close` removed the directory you were standing in and couldn't move you, it prints `current directory was removed — run: cd <root>` — run that to escape the deleted directory.
+A `dojo switch` that can't change directory exits non-zero (you stay in a valid directory). If `dojo close` removed the directory you were standing in and couldn't move you, it prints `current directory was removed — run: cd <root>` — run that to escape the deleted directory.
 
 See [shell-integration.md](shell-integration.md) for the mechanism and manual installation.
 
@@ -20,17 +20,17 @@ See [shell-integration.md](shell-integration.md) for the mechanism and manual in
 
 ## fish tab-completion shows files instead of workspaces
 
-**Symptom:** in fish, `ji switch`/`sync`/`transfer <TAB>` completes files and directories from the current directory instead of the workspaces; `ji <TAB>` (subcommands) still works.
+**Symptom:** in fish, `dojo switch`/`sync`/`transfer <TAB>` completes files and directories from the current directory instead of the workspaces; `dojo <TAB>` (subcommands) still works.
 
-**Cause:** a stale or duplicate `~/.config/fish/completions/ji.fish` — typically written by an older `ji config shell install` before completions became dynamic — shadows the correct completion. fish autoloads the first `ji.fish` on `$fish_complete_path`, and the user directory comes first, so an out-of-date file there wins over the dynamic one Homebrew ships in `…/vendor_completions.d/`.
+**Cause:** a stale or duplicate `~/.config/fish/completions/dojo.fish` — typically written by an older `dojo config shell install` before completions became dynamic — shadows the correct completion. fish autoloads the first `dojo.fish` on `$fish_complete_path`, and the user directory comes first, so an out-of-date file there wins over the dynamic one Homebrew ships in `…/vendor_completions.d/`.
 
-**Fix:** `ji config shell install fish` — it removes the redundant/stale file when a vendor completion provides completions (or refreshes it to the current dynamic form otherwise). `ji config shell status fish` reports the shadow. You can also just delete `~/.config/fish/completions/ji.fish` to fall through to the vendor completion.
+**Fix:** `dojo config shell install fish` — it removes the redundant/stale file when a vendor completion provides completions (or refreshes it to the current dynamic form otherwise). `dojo config shell status fish` reports the shadow. You can also just delete `~/.config/fish/completions/dojo.fish` to fall through to the vendor completion.
 
 ---
 
 ## "working copy is stale — another tool modified the repo"
 
-**Symptom:** CLI prints `(ji)::stale ...` and exits 1; the TUI shows a stale-alert modal.
+**Symptom:** CLI prints `(dojo)::stale ...` and exits 1; the TUI shows a stale-alert modal.
 
 **Cause:** Another process (you, another agent, another editor) changed the repository state since the workspace's last snapshot.
 
@@ -39,23 +39,23 @@ See [shell-integration.md](shell-integration.md) for the mechanism and manual in
 - **TUI:** press `u` on a stale workspace to open the update-stale dialog, inspect pending changes, and resolve. Or press `r` in the stale-alert modal to save all stale diffs and resolve.
 - **CLI:** `jj workspace update-stale`.
 
-Saved diffs, when the TUI writes them, land in `.ji/diffs/`.
+Saved diffs, when the TUI writes them, land in `.dojo/diffs/`.
 
 ---
 
 ## "no workspace matching '<target>'"
 
-**Symptom:** `ji switch <target>` or a CLI source/target argument errors.
+**Symptom:** `dojo switch <target>` or a CLI source/target argument errors.
 
 **Cause:** The target does not match any workspace name, change ID prefix, or bookmark (at-head or behind).
 
-**Fix:** run `ji ls` to list workspaces and pick a valid name, change ID prefix, or bookmark.
+**Fix:** run `dojo ls` to list workspaces and pick a valid name, change ID prefix, or bookmark.
 
 ---
 
 ## "ambiguous target '<target>': matches ..."
 
-**Symptom:** `ji switch` errors with a list of candidates.
+**Symptom:** `dojo switch` errors with a list of candidates.
 
 **Cause:** The target argument is a prefix that matches multiple workspaces (e.g., a 1-char change ID prefix that several workspaces share).
 
@@ -65,7 +65,7 @@ Saved diffs, when the TUI writes them, land in `.ji/diffs/`.
 
 ## Adaptive operation is unavailable
 
-**Symptom:** `ji close <target> --method adaptive` or `ji transfer --method adaptive` fails, or the adaptive entry is missing from the TUI dialog.
+**Symptom:** `dojo close <target> --method adaptive` or `dojo transfer --method adaptive` fails, or the adaptive entry is missing from the TUI dialog.
 
 **Cause:** The sync mode does not support adaptive resolution:
 
@@ -82,9 +82,9 @@ See [operations.md](operations.md#sync-mode-detection).
 
 **Symptom:** A TUI operation fails immediately after confirmation.
 
-**Cause:** The repo's operation head advanced between when ji computed the sync mode and when it tried to execute the operation — usually because another process committed in parallel.
+**Cause:** The repo's operation head advanced between when dojo computed the sync mode and when it tried to execute the operation — usually because another process committed in parallel.
 
-**Fix:** retry the operation. ji will recompute the sync mode against the fresh repo state.
+**Fix:** retry the operation. dojo will recompute the sync mode against the fresh repo state.
 
 ---
 
@@ -92,7 +92,7 @@ See [operations.md](operations.md#sync-mode-detection).
 
 **Symptom:** Pressing `n` in the TUI opens a `ConfigWarning` modal instead of the Create dialog.
 
-**Cause:** `.config/ji.toml` has template warnings (unknown variables, malformed `{{...}}` delimiters).
+**Cause:** `.config/dojo.toml` has template warnings (unknown variables, malformed `{{...}}` delimiters).
 
 **Fix:** edit the config file to fix the flagged template strings. See [configuration.md](configuration.md#template-validation) for the rules.
 
@@ -100,11 +100,11 @@ See [operations.md](operations.md#sync-mode-detection).
 
 ## Workspace directory not removed after close
 
-**Symptom:** `ji close` succeeds but the workspace directory is still on disk.
+**Symptom:** `dojo close` succeeds but the workspace directory is still on disk.
 
 **Cause:** `--delete-files` was not passed (CLI) or `k` was not toggled (TUI), or the directory was already missing.
 
-**Fix:** pass `--delete-files` on the next close, or `rm -rf <path>` manually. `ji close` refuses to delete the directory if it cannot locate it.
+**Fix:** pass `--delete-files` on the next close, or `rm -rf <path>` manually. `dojo close` refuses to delete the directory if it cannot locate it.
 
 ---
 
@@ -112,7 +112,7 @@ See [operations.md](operations.md#sync-mode-detection).
 
 **Symptom:** After closing a workspace, a server started by a `[post-start]` hook keeps running.
 
-**Cause:** `[post-start]` hooks are fire-and-forget by design — ji does not track them and cannot stop them when the workspace is closed.
+**Cause:** `[post-start]` hooks are fire-and-forget by design — dojo does not track them and cannot stop them when the workspace is closed.
 
 **Fix:** stop the process manually (e.g., `pkill -f`). If you need lifecycle-managed processes, run them under a supervisor such as `launchd`, `tmux`, or a project runner.
 
@@ -128,15 +128,15 @@ See [operations.md](operations.md#sync-mode-detection).
 - Or open the op log pane (`o`), select the desired operation, and press `R` to restore to it.
 - From the shell, `jj op log` and `jj op restore <id>` expose the same history.
 
-**Note:** `Z` / `Y` only traverse actions that ji itself initiated — recorded in a persisted history (`.ji/action-history.json`) — not operations made outside ji (by another shell or another tool). If you want to undo something that wasn't made via ji, use the op log pane (`o`) or `jj op restore` directly.
+**Note:** `Z` / `Y` only traverse actions that dojo itself initiated — recorded in a persisted history (`.dojo/action-history.json`) — not operations made outside dojo (by another shell or another tool). If you want to undo something that wasn't made via dojo, use the op log pane (`o`) or `jj op restore` directly.
 
 ---
 
 ## Create errors with "bookmark already exists"
 
-**Symptom:** `ji new <bookmark>` fails because a bookmark with that name already exists elsewhere in the repo.
+**Symptom:** `dojo new <bookmark>` fails because a bookmark with that name already exists elsewhere in the repo.
 
-**Fix:** choose a different bookmark name, or delete the existing bookmark first (`jj bookmark delete <name>`). If you wanted to resume work on that bookmark instead of creating a new workspace, use `ji new <bookmark> --create-if-necessary`, which switches to an existing workspace when the bookmark name already matches one.
+**Fix:** choose a different bookmark name, or delete the existing bookmark first (`jj bookmark delete <name>`). If you wanted to resume work on that bookmark instead of creating a new workspace, use `dojo new <bookmark> --create-if-necessary`, which switches to an existing workspace when the bookmark name already matches one.
 
 ---
 
@@ -144,7 +144,7 @@ See [operations.md](operations.md#sync-mode-detection).
 
 **Symptom:** a Finder alias in a workspace (or in `default@` after a merge-back) opens as a plain document instead of resolving; `ls -l@` shows no `com.apple.FinderInfo` attribute on it.
 
-**Cause:** jj stores only file content + mode. Any jj materialization (workspace add, merge into a working copy, update-stale) writes a fresh file without xattrs, and the FinderInfo xattr is what marks the file as an alias. ji restores the metadata around its own operations (see [xattrs.md](xattrs.md)); files materialized by plain jj commands, by an older ji, or with `preserve-finder-xattrs = false` stay stripped.
+**Cause:** jj stores only file content + mode. Any jj materialization (workspace add, merge into a working copy, update-stale) writes a fresh file without xattrs, and the FinderInfo xattr is what marks the file as an alias. dojo restores the metadata around its own operations (see [xattrs.md](xattrs.md)); files materialized by plain jj commands, by an older dojo, or with `preserve-finder-xattrs = false` stay stripped.
 
 **Fix:** the bookmark data survives, so re-add the xattr:
 
@@ -152,7 +152,7 @@ See [operations.md](operations.md#sync-mode-detection).
 xattr -wx com.apple.FinderInfo "616C69734D414353800000000000000000000000000000000000000000000000" <file>
 ```
 
-Hard links are related but not repairable in-place: jj materializes each path as an independent file (content preserved, shared inode lost) and ji warns (`hard link broken: …`). Re-link manually with `ln -f <original> <copy>`, or use a symlink — the only link type jj represents faithfully.
+Hard links are related but not repairable in-place: jj materializes each path as an independent file (content preserved, shared inode lost) and dojo warns (`hard link broken: …`). Re-link manually with `ln -f <original> <copy>`, or use a symlink — the only link type jj represents faithfully.
 
 ---
 

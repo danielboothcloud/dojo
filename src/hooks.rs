@@ -304,7 +304,7 @@ pub fn run_blocking(
     for (name, cmd) in hooks {
         let cmd = expand(cmd, vars);
         if !quiet {
-            eprintln!("(ji)::hook running {label}/{name}: {cmd}");
+            eprintln!("(dojo)::hook running {label}/{name}: {cmd}");
         }
         let start = std::time::Instant::now();
         let status = Command::new("sh")
@@ -340,7 +340,7 @@ pub fn write_templates(
         fs::write(&dest, expanded)
             .with_context(|| format!("failed to write template {rel_path}"))?;
         if !quiet {
-            eprintln!("(ji)::template wrote {rel_path}");
+            eprintln!("(dojo)::template wrote {rel_path}");
         }
     }
     Ok(())
@@ -357,7 +357,7 @@ pub fn run_background(
     for (name, cmd) in hooks {
         let cmd = expand(cmd, vars);
         if !quiet {
-            eprintln!("(ji)::hook starting {label}/{name}: {cmd}");
+            eprintln!("(dojo)::hook starting {label}/{name}: {cmd}");
         }
         let result = Command::new("sh")
             .args(["-c", &cmd])
@@ -374,7 +374,7 @@ pub fn run_background(
         if let Err(e) = result
             && !quiet
         {
-            eprintln!("(ji)::hook failed to start {label}/{name}: {e}");
+            eprintln!("(dojo)::hook failed to start {label}/{name}: {e}");
         }
     }
 }

@@ -31,8 +31,8 @@ const TMPL_ID_EMPTY_PARENTS_DESC: &str = r#"change_id ++ "\x1f" ++ if(empty, "tr
 // Structured descriptions
 // ---------------------------------------------------------------------------
 
-/// Namespace prefix for ji-generated commit descriptions.
-pub const PREFIX: &str = "ji::";
+/// Namespace prefix for dojo-generated commit descriptions.
+pub const PREFIX: &str = "dojo::";
 
 /// Operation types for structured commit descriptions.
 pub enum Op {
@@ -172,7 +172,7 @@ pub fn filter_existing_revisions<'a>(repo: &Path, change_ids: &[&'a str]) -> Res
 /// Returns `true` if any of:
 /// - empty
 /// - single word (no whitespace)
-/// - a single line starting with `(ji::` (ji-generated marker)
+/// - a single line starting with `(dojo::` (dojo-generated marker)
 /// - matches jj's configured `templates.new_description` for this revision
 fn is_trivial_description(repo: &Path, revset: &str, desc: &str) -> bool {
     let d = desc.trim();
@@ -767,7 +767,7 @@ fn find_nontrivial_target(repo: &Path, starting_revset: &str) -> Result<Effectiv
 /// Ensure the workspace has a fresh trivial head.
 ///
 /// If `@` is already a trivial head, this is a no-op — returns the existing
-/// `@`'s change-id.  Otherwise creates a `(ji::step-forward)` revision
+/// `@`'s change-id.  Otherwise creates a `(dojo::step-forward)` revision
 /// and returns the new `@`'s change-id.
 pub fn step_head(
     repo: &Path,
@@ -924,19 +924,19 @@ pub fn delete_singular_bookmark(
 }
 
 // ---------------------------------------------------------------------------
-// .ji directory
+// .dojo directory
 // ---------------------------------------------------------------------------
 
-/// Ensure the `.ji` per-workspace directory exists with a `.gitignore`.
+/// Ensure the `.dojo` per-workspace directory exists with a `.gitignore`.
 ///
-/// The `.ji` dir holds ji's per-workspace state (logs, diffs, etc.)
+/// The `.dojo` dir holds dojo's per-workspace state (logs, diffs, etc.)
 /// and is excluded from VCS via an inner `.gitignore`.
-pub fn ensure_ji_dir(ws_path: &Path) -> Result<()> {
-    let ji_dir = ws_path.join(".ji");
-    std::fs::create_dir_all(&ji_dir).context("failed to create .ji directory")?;
+pub fn ensure_dojo_dir(ws_path: &Path) -> Result<()> {
+    let ji_dir = ws_path.join(".dojo");
+    std::fs::create_dir_all(&ji_dir).context("failed to create .dojo directory")?;
     let gitignore = ji_dir.join(".gitignore");
     if !gitignore.exists() {
-        std::fs::write(&gitignore, "/*\n").context("failed to write .ji/.gitignore")?;
+        std::fs::write(&gitignore, "/*\n").context("failed to write .dojo/.gitignore")?;
     }
     Ok(())
 }

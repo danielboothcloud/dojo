@@ -2,8 +2,8 @@
 /target
 /.task
 
-# ji runtime logs (written when JI_LOG is enabled).
-/.ji/
+# dojo runtime logs (written when DOJO_LOG is enabled).
+/.dojo/
 
 # macOS Finder metadata.
 .DS_Store

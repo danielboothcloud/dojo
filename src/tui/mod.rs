@@ -85,7 +85,7 @@ enum Mode {
     UpdateStale,
     ConfigWarning,
     OpRestore,
-    /// Confirm undo/redo when non-snapshot ops occurred since last ji action.
+    /// Confirm undo/redo when non-snapshot ops occurred since last dojo action.
     UndoRedoConfirm {
         is_redo: bool,
     },
@@ -163,7 +163,7 @@ struct App {
     config: config::Config,
     repo_root: PathBuf,
     current_root: PathBuf,
-    /// The actual directory `ji` was launched from (may be a subdirectory of a
+    /// The actual directory `dojo` was launched from (may be a subdirectory of a
     /// workspace). The post-close rescue check keys on whether this still exists,
     /// not the workspace root.
     launch_cwd: PathBuf,
@@ -223,7 +223,7 @@ struct App {
     show_files: bool,
     /// Cache of change_id → diff summary, to avoid re-fetching.
     cached_files: HashMap<String, jujutsu::DiffSummary>,
-    /// Undo/redo stack for compound ji actions.
+    /// Undo/redo stack for compound dojo actions.
     action_history: action_history::ActionHistory,
     /// Path to the persisted action history JSON file.
     history_path: PathBuf,
@@ -251,7 +251,7 @@ enum Action {
 }
 
 /// Build the post-close cd action, keyed to the launch cwd (`origin`) rather than
-/// the workspace root (`ji` may run from a subdirectory). Factored out so the
+/// the workspace root (`dojo` may run from a subdirectory). Factored out so the
 /// origin-is-cwd wiring is unit-testable.
 fn post_close_action(launch_cwd: &Path, repo_root: &Path) -> Action {
     Action::CloseCd {
@@ -282,7 +282,7 @@ enum PendingHandoff {
     /// invoked after the user confirms `Mode::ConfirmRemoveFiles` with 'y'.
     /// Records nothing in action history (directory deletion isn't a jj op).
     RemoveDirAll { path: std::path::PathBuf },
-    /// Save the currently-selected file's diff to `.ji/diffs/`. Invokes
+    /// Save the currently-selected file's diff to `.dojo/diffs/`. Invokes
     /// `update_stale_dialog::save_diff_inline`, which shells out to
     /// `jj file show` and writes a unified diff.
     SaveDiff {
@@ -1132,9 +1132,7 @@ impl App {
                 // SyncParamsOwned paths are executable state, and op-head
                 // movement can include a forget/re-add that relocates a
                 // workspace — verify both paths by name before deferring.
-                let paths_ok = jujutsu::list_workspaces(&self.repo_root)
-                    .ok()
-                    .is_some_and(|wss| {
+                let paths_ok = jujutsu::list_workspaces(&self.repo_root).is_ok_and(|wss| {
                         let path_of =
                             |n: &str| wss.iter().find(|w| w.name == n).map(|w| w.path.clone());
                         path_of(&src_name).as_deref() == Some(src_path.as_path())
@@ -1400,7 +1398,7 @@ impl App {
             target_path: target.path,
             workspace_path_template: self.config.workspace_path.clone(),
             repo_name: self.repo_name.clone(),
-            author: self.config.ji_author.clone(),
+            author: self.config.dojo_author.clone(),
             preserve_finder_xattrs: self.config.preserve_finder_xattrs,
         };
         self.pending_handoff = Some(PendingHandoff::Sync { params, label });
@@ -1522,7 +1520,7 @@ impl App {
                     revisions,
                     workspace_path_template: self.config.workspace_path.clone(),
                     repo_name: self.repo_name.clone(),
-                    author: self.config.ji_author.clone(),
+                    author: self.config.dojo_author.clone(),
                     preserve_finder_xattrs: self.config.preserve_finder_xattrs,
                 };
                 self.pending_handoff = Some(PendingHandoff::Close {
@@ -1530,7 +1528,6 @@ impl App {
                     info,
                     label,
                 });
-                true
             }
             DialogIntent::Transfer => {
                 let Ok(method) = commands::types::TransferMethod::try_from(operation) else {
@@ -1553,7 +1550,7 @@ impl App {
                     method,
                     workspace_path_template: self.config.workspace_path.clone(),
                     repo_name: self.repo_name.clone(),
-                    author: self.config.ji_author.clone(),
+                    author: self.config.dojo_author.clone(),
                     preserve_finder_xattrs: self.config.preserve_finder_xattrs,
                 };
                 self.pending_handoff = Some(PendingHandoff::Transfer {
@@ -1561,9 +1558,9 @@ impl App {
                     info,
                     label,
                 });
-                true
             }
         }
+        true
     }
 
     // -----------------------------------------------------------------------
@@ -3153,7 +3150,7 @@ impl App {
                 Style::default(),
             )),
             Line::from(Span::styled(
-                format!("the last ji action. {verb} will also revert those."),
+                format!("the last dojo action. {verb} will also revert those."),
                 Style::default(),
             )),
             Line::from(""),
@@ -3286,14 +3283,14 @@ impl App {
 // Non-interactive CLI commands (exit after execution)
 // ===========================================================================
 
-/// Non-interactive workspace switch (used by `ji switch <target>`).
+/// Non-interactive workspace switch (used by `dojo switch <target>`).
 pub fn switch(target: &str) -> Result<()> {
     let repo_root = jujutsu::workspace_root()?;
     let ws_path = commands::switch::switch(&repo_root, target)?;
     shell::apply_switch_cd(&ws_path)
 }
 
-/// Non-interactive create-or-switch (used by `ji new <target> --create-if-necessary`).
+/// Non-interactive create-or-switch (used by `dojo new <target> --create-if-necessary`).
 pub fn create_or_switch(
     target: &str,
     revision: Option<&str>,
@@ -3316,7 +3313,7 @@ pub fn create_or_switch(
     }
 }
 
-/// Non-interactive workspace creation (used by `ji new`).
+/// Non-interactive workspace creation (used by `dojo new`).
 pub fn create(
     bookmark: &str,
     revision: Option<&str>,
@@ -3329,7 +3326,7 @@ pub fn create(
 
     // Print any template warnings to stderr (CLI mode: warn and proceed).
     for w in &config.warnings {
-        eprintln!("(ji)::config {w}");
+        eprintln!("(dojo)::config {w}");
         if matches!(w.kind, hooks::WarningKind::UnknownVariable) {
             let known = if w.context == "workspace-path" {
                 hooks::known_vars_hint(hooks::PATH_VARS)
@@ -3360,7 +3357,7 @@ pub fn create(
     )?;
 
     for w in &result.warnings {
-        eprintln!("(ji)::warning: {w}");
+        eprintln!("(dojo)::warning: {w}");
     }
 
     shell::apply_followup_cd(&result.workspace_path)
@@ -3453,11 +3450,11 @@ fn re_enter_raw_mode(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>) -> i
 }
 
 /// The success line for a per-workspace stale update. `saved == 0` uses the plain
-/// success string; `saved > 0` adds the recovery-path detail (diffs saved to `.ji/diffs/`).
+/// success string; `saved > 0` adds the recovery-path detail (diffs saved to `.dojo/diffs/`).
 fn stale_update_success_text(name: &str, saved: usize) -> String {
     if saved > 0 {
         format!(
-            "{name}: updated successfully - no longer stale ({saved} diff(s) saved to .ji/diffs/)"
+            "{name}: updated successfully - no longer stale ({saved} diff(s) saved to .dojo/diffs/)"
         )
     } else {
         format!("{name}: updated successfully - no longer stale")
@@ -3496,7 +3493,7 @@ fn stale_sequence_status(saved: Result<usize, &str>) -> Option<(String, StatusLe
     match saved {
         Ok(0) => None,
         Ok(n) => Some((
-            format!("Resolved. {n} diff(s) saved to .ji/diffs/"),
+            format!("Resolved. {n} diff(s) saved to .dojo/diffs/"),
             StatusLevel::Success,
         )),
         Err(e) => Some((
@@ -3586,7 +3583,7 @@ fn drain_pending_handoff(
             match update_stale_dialog::save_all_diffs_inline(&ws_path, &items) {
                 Ok(0) => app.set_status("No diffs to save".into(), StatusLevel::Info),
                 Ok(n) => app.set_status(
-                    format!("Saved {n} diff(s) to .ji/diffs/"),
+                    format!("Saved {n} diff(s) to .dojo/diffs/"),
                     StatusLevel::Success,
                 ),
                 Err(e) => app.set_status(format!("Diff failed: {e:#}"), StatusLevel::Error),
@@ -3933,8 +3930,8 @@ pub fn run() -> Result<()> {
     sort_revisions_by_graph(&line_heads, &mut workspaces);
 
     // Load persisted action history.
-    jj_utils::ensure_ji_dir(&repo_root)?;
-    let history_path = repo_root.join(".ji/action-history.json");
+    jj_utils::ensure_dojo_dir(&repo_root)?;
+    let history_path = repo_root.join(".dojo/action-history.json");
     let action_history = action_history::ActionHistory::load(&history_path);
 
     let mut app = App::new(
@@ -4088,7 +4085,7 @@ mod tests {
                 Some("head-change".to_string()),
             ],
             action_history::ActionHistory::new(),
-            PathBuf::from("/tmp/ji-history.json"),
+            PathBuf::from("/tmp/dojo-history.json"),
         )
     }
 
@@ -4223,7 +4220,7 @@ mod tests {
         );
         assert_eq!(
             stale_update_success_text("ws3", 2),
-            "ws3: updated successfully - no longer stale (2 diff(s) saved to .ji/diffs/)"
+            "ws3: updated successfully - no longer stale (2 diff(s) saved to .dojo/diffs/)"
         );
     }
 
@@ -4257,7 +4254,7 @@ mod tests {
         assert_eq!(
             stale_sequence_status(Ok(3)),
             Some((
-                "Resolved. 3 diff(s) saved to .ji/diffs/".to_string(),
+                "Resolved. 3 diff(s) saved to .dojo/diffs/".to_string(),
                 StatusLevel::Success
             ))
         );
@@ -4278,8 +4275,8 @@ mod tests {
             DialogBlock::WorkspaceListUnavailable.level(),
             StatusLevel::Error
         );
-        assert!(!DialogBlock::ProbeIncomplete.reason().is_empty());
-        assert!(!DialogBlock::WorkspaceListUnavailable.reason().is_empty());
+        assert_ne!(DialogBlock::ProbeIncomplete.reason(), "");
+        assert_ne!(DialogBlock::WorkspaceListUnavailable.reason(), "");
     }
 
     /// Foreground color of the first cell of the first occurrence of `needle` in

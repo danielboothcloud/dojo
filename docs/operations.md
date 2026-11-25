@@ -1,11 +1,11 @@
 # Operations
 
-`ji sync`, `ji transfer`, and `ji close` are the three commands that combine two workspaces. This page documents the mode detection, the concrete methods, and the jj command sequences each method runs.
+`dojo sync`, `dojo transfer`, and `dojo close` are the three commands that combine two workspaces. This page documents the mode detection, the concrete methods, and the jj command sequences each method runs.
 
 - [Terminology](#terminology)
 - [Sync mode detection](#sync-mode-detection)
 - [Adaptive resolution](#adaptive-resolution)
-- [`ji sync`](#ji-sync)
+- [`dojo sync`](#dojo-sync)
 - [Transfer methods](#transfer-methods)
 - [Close methods](#close-methods)
 - [Bookmark actions on close](#bookmark-actions-on-close)
@@ -13,21 +13,21 @@
 
 ## Terminology
 
-- **Default workspace** — the workspace at the repository root, addressable as `default@`. It serves the role of the `main`/`master` branch in git. `transfer` and `sync` default their `target` argument to this workspace when none is given; `close` does so only with `--source` (a bare non-disposal `ji close` requires an explicit target).
-- **Source** / **target** — in `ji close`, `ji transfer`, and `ji sync`, the source is the workspace the operation is run *from* (the current working directory unless `--source` overrides), and the target is the workspace the operation is run *against* (`default@` when no positional `target` is given — though a bare non-disposal `ji close` requires an explicit target). By convention, source is a feature workspace and target is `default@`.
-- **Step-forward commit** — an empty commit ji inserts on a workspace's `@` to keep two workspaces from sharing the same working-copy revision. Description: `(ji::step-forward)`. Two workspaces must never have the same `@`, so ji adds these after any operation that would otherwise produce a shared `@`.
-- **Trivial head** — a graph head that is empty (no file changes), single-parent (not a merge), and has a "trivial" description. A description counts as trivial if it is empty, is a single word with no whitespace, starts with `(ji::` (on a single line), or matches jj's configured `templates.new_description` exactly. Step-forward commits and `(ji::fast-forward)` commits are both trivial by this definition.
-- **Effective head** — a workspace's line-of-work tip, with a trivial `@` skipped. If `@` is a trivial head, the effective head is `@-`; otherwise it is `@`. ji compares effective heads when deciding whether two workspaces are in sync.
+- **Default workspace** — the workspace at the repository root, addressable as `default@`. It serves the role of the `main`/`master` branch in git. `transfer` and `sync` default their `target` argument to this workspace when none is given; `close` does so only with `--source` (a bare non-disposal `dojo close` requires an explicit target).
+- **Source** / **target** — in `dojo close`, `dojo transfer`, and `dojo sync`, the source is the workspace the operation is run *from* (the current working directory unless `--source` overrides), and the target is the workspace the operation is run *against* (`default@` when no positional `target` is given — though a bare non-disposal `dojo close` requires an explicit target). By convention, source is a feature workspace and target is `default@`.
+- **Step-forward commit** — an empty commit dojo inserts on a workspace's `@` to keep two workspaces from sharing the same working-copy revision. Description: `(dojo::step-forward)`. Two workspaces must never have the same `@`, so dojo adds these after any operation that would otherwise produce a shared `@`.
+- **Trivial head** — a graph head that is empty (no file changes), single-parent (not a merge), and has a "trivial" description. A description counts as trivial if it is empty, is a single word with no whitespace, starts with `(dojo::` (on a single line), or matches jj's configured `templates.new_description` exactly. Step-forward commits and `(dojo::fast-forward)` commits are both trivial by this definition.
+- **Effective head** — a workspace's line-of-work tip, with a trivial `@` skipped. If `@` is a trivial head, the effective head is `@-`; otherwise it is `@`. dojo compares effective heads when deciding whether two workspaces are in sync.
 - **Last common ancestor (LCA)** — `latest(fork_point(src_eff | tgt_eff))` — the most recent revision that is an ancestor of both effective heads.
-- **Singular bookmark** — the bookmark whose name matches the workspace's `{{ bookmark }}` template value (derived from `workspace-path` and the workspace name). ji creates it on `ji new` and manages it automatically during close/transfer/sync.
-- **Adaptive method** — `--method adaptive` (the default for `close` and `transfer`). ji inspects the [sync mode](#sync-mode-detection) and dispatches to a concrete method; see [adaptive resolution](#adaptive-resolution).
+- **Singular bookmark** — the bookmark whose name matches the workspace's `{{ bookmark }}` template value (derived from `workspace-path` and the workspace name). dojo creates it on `dojo new` and manages it automatically during close/transfer/sync.
+- **Adaptive method** — `--method adaptive` (the default for `close` and `transfer`). dojo inspects the [sync mode](#sync-mode-detection) and dispatches to a concrete method; see [adaptive resolution](#adaptive-resolution).
 - **Disposal method** — a close method that does not require a target: `detach` and `abandon`. Both forget the source workspace; `abandon` additionally deletes its revisions.
 
 In diagrams below, `src_eff` / `tgt_eff` are the effective heads, `src_at` / `tgt_at` are the actual `@`, `lca` is the last common ancestor of the two effective heads, and `{src}` / `{tgt}` are the workspace names. `[{ws}] jj ...` means the command runs with that workspace's directory as its working directory.
 
 ### A note on `--ignore-working-copy`
 
-Most `jj` commands ji runs as part of these operations — `jj squash`, `jj rebase`, `jj abandon`, `jj bookmark set`, `jj workspace forget`, `jj log` reads — pass `--ignore-working-copy`, so jj neither snapshots the working copy nor writes it out on each call. The deliberate exceptions are:
+Most `jj` commands dojo runs as part of these operations — `jj squash`, `jj rebase`, `jj abandon`, `jj bookmark set`, `jj workspace forget`, `jj log` reads — pass `--ignore-working-copy`, so jj neither snapshots the working copy nor writes it out on each call. The deliberate exceptions are:
 
 - **Explicit `jj util snapshot` calls** that capture pending edits at defined points: the entry/gate snapshot of the involved workspaces, the [pre-execution protection snapshot](#pre-execution-protection-snapshot) of every workspace, the snapshot before `jj workspace forget`, and the target snapshot before each merge variant.
 - **Commands that must read or write the working copy live** (auto-snapshot inherent): the merge-commit creation in the source/target workspace, `jj workspace add`, `jj workspace update-stale`, and the live `jj status`/`jj log` staleness and safety probes.
@@ -36,11 +36,11 @@ The command sequences below omit the `--ignore-working-copy` flag for readabilit
 
 ### Pre-execution protection snapshot
 
-Immediately before executing, every mutating operation (sync, close, transfer) re-lists the workspaces, verifies the involved source/target still resolve to the paths the plan was built against (aborting with "repo changed, please retry" on mismatch), and snapshots **every existing workspace** — third parties first in descendant-first order, the involved source/target last — so pending working-copy edits anywhere in the repo are captured before the operation can rebase (and thereby stale) them. A jj-stale third-party workspace is skipped (its edits belong to the `jj workspace update-stale` workflow); any other snapshot failure aborts the operation. Afterwards ji re-verifies that nothing but snapshots moved the operation log and that the re-detected plan is equivalent to the validated one; otherwise it aborts before mutating anything.
+Immediately before executing, every mutating operation (sync, close, transfer) re-lists the workspaces, verifies the involved source/target still resolve to the paths the plan was built against (aborting with "repo changed, please retry" on mismatch), and snapshots **every existing workspace** — third parties first in descendant-first order, the involved source/target last — so pending working-copy edits anywhere in the repo are captured before the operation can rebase (and thereby stale) them. A jj-stale third-party workspace is skipped (its edits belong to the `jj workspace update-stale` workflow); any other snapshot failure aborts the operation. Afterwards dojo re-verifies that nothing but snapshots moved the operation log and that the re-detected plan is equivalent to the validated one; otherwise it aborts before mutating anything.
 
 ## Sync mode detection
 
-Before running a close/transfer/sync operation, ji computes a `SyncModeInfo` by:
+Before running a close/transfer/sync operation, dojo computes a `SyncModeInfo` by:
 
 1. Resolving each workspace's effective head (one `jj log` call per workspace).
 2. Finding the LCA of the two effective heads.
@@ -58,11 +58,11 @@ The four sync modes:
 
 ### Operation-log validation
 
-The `SyncModeInfo` captures the repo's operation head at detection time. When the operation is later executed, ji compares the current op head to the captured one. If the op head has not changed, the cached head info is used as-is. If the op head *has* changed (another process modified the repo in the meantime), ji recomputes the head info and the sync mode — and if the sync mode has shifted to a different category (e.g. what was `Diverged` is now `SourceOnly`), ji aborts with `repo changed externally, please retry`. A change in head info without a change in sync mode is accepted silently.
+The `SyncModeInfo` captures the repo's operation head at detection time. When the operation is later executed, dojo compares the current op head to the captured one. If the op head has not changed, the cached head info is used as-is. If the op head *has* changed (another process modified the repo in the meantime), dojo recomputes the head info and the sync mode — and if the sync mode has shifted to a different category (e.g. what was `Diverged` is now `SourceOnly`), dojo aborts with `repo changed externally, please retry`. A change in head info without a change in sync mode is accepted silently.
 
 ## Adaptive resolution
 
-**Adaptive transfer** (`ji transfer --method adaptive`):
+**Adaptive transfer** (`dojo transfer --method adaptive`):
 
 | Sync mode | Concrete method |
 |---|---|
@@ -71,7 +71,7 @@ The `SyncModeInfo` captures the repo's operation head at detection time. When th
 | `Diverged` | `merge` |
 | `InSync` | errors: `adaptive merge unavailable for current sync state` |
 
-**Adaptive close** (`ji close <target> --method adaptive`):
+**Adaptive close** (`dojo close <target> --method adaptive`):
 
 | Sync mode | Concrete method |
 |---|---|
@@ -82,33 +82,33 @@ The `SyncModeInfo` captures the repo's operation head at detection time. When th
 
 (`TargetOnly` is an error for close because the source has no new work to move into the target — there is nothing to close.)
 
-## `ji sync`
+## `dojo sync`
 
 ```
-ji sync [target] [--source <NAME>]
+dojo sync [target] [--source <NAME>]
 ```
 
-`ji sync` reconciles two workspaces; both remain open. It has no `--method` flag — the strategy is always picked from the [sync mode](#sync-mode-detection):
+`dojo sync` reconciles two workspaces; both remain open. It has no `--method` flag — the strategy is always picked from the [sync mode](#sync-mode-detection):
 
 | Mode | Action |
 |---|---|
-| `InSync` | no-op, prints `(ji)::sync already in sync` |
+| `InSync` | no-op, prints `(dojo)::sync already in sync` |
 | `SourceOnly` | fast-forward target to source's effective head, then step source forward |
 | `TargetOnly` | fast-forward source to target's effective head, then step target forward |
 | `Diverged` | create a merge commit in the source workspace with both effective heads as parents, then step both workspaces forward past the merge |
 
-For the command sequences and diagrams, see the corresponding transfer methods ([fast-forward-target](#transfer-fast-forward-target), [fast-forward-source](#transfer-fast-forward-source), [merge](#transfer-merge)). `ji sync`'s fast-forward steps the *ahead* side forward after the behind side catches up, so neither workspace is left sitting on the other's `@`.
+For the command sequences and diagrams, see the corresponding transfer methods ([fast-forward-target](#transfer-fast-forward-target), [fast-forward-source](#transfer-fast-forward-source), [merge](#transfer-merge)). `dojo sync`'s fast-forward steps the *ahead* side forward after the behind side catches up, so neither workspace is left sitting on the other's `@`.
 
 ---
 
 ## Transfer methods
 
-`ji transfer` reconciles two workspaces; both remain open. Adaptive picks a concrete method from the sync mode; you can also pass a concrete method explicitly.
+`dojo transfer` reconciles two workspaces; both remain open. Adaptive picks a concrete method from the sync mode; you can also pass a concrete method explicitly.
 
 ### Transfer: merge
 
 ```
-ji transfer [target] --method merge
+dojo transfer [target] --method merge
 ```
 
 Create a merge commit whose parents are the two effective heads, then step both workspaces forward past the merge.
@@ -118,9 +118,9 @@ Create a merge commit whose parents are the two effective heads, then step both 
 **Commands:**
 
 ```bash
-[{src}] jj new -m "(ji::merge) {src}@{src_eff} + {tgt}@{tgt_eff}" -- {src_eff} {tgt_eff}
-[{src}] jj new -m "(ji::step-forward)"
-[{tgt}] jj new -m "(ji::step-forward)" -- {merge_id}
+[{src}] jj new -m "(dojo::merge) {src}@{src_eff} + {tgt}@{tgt_eff}" -- {src_eff} {tgt_eff}
+[{src}] jj new -m "(dojo::step-forward)"
+[{tgt}] jj new -m "(dojo::step-forward)" -- {merge_id}
 jj abandon -- {src_trivial} {tgt_trivial}   # only the trivials that existed pre-op
 ```
 
@@ -142,7 +142,7 @@ s@:      X → Y → Z ↗   ↘ Ns
 ### Transfer: fast-forward-target
 
 ```
-ji transfer [target] --method fast-forward-target
+dojo transfer [target] --method fast-forward-target
 ```
 
 Fast-forward the target to the source's effective head. The source is stepped forward so that the two workspaces do not share `@`.
@@ -152,9 +152,9 @@ Fast-forward the target to the source's effective head. The source is stepped fo
 **Commands:**
 
 ```bash
-[{tgt}] jj new -m "(ji::fast-forward) {tgt}@ to {src}@{src_eff}" -- {src_eff}
+[{tgt}] jj new -m "(dojo::fast-forward) {tgt}@ to {src}@{src_eff}" -- {src_eff}
 jj abandon -- {tgt_trivial}             # only if the target had a trivial head pre-op
-[{src}] jj new -m "(ji::step-forward)"  # skipped if src@ is already a trivial head
+[{src}] jj new -m "(dojo::step-forward)"  # skipped if src@ is already a trivial head
 ```
 
 **Diagram:**
@@ -169,12 +169,12 @@ s@:              ↳ Ns
                    @
 ```
 
-`Nt` is the `(ji::fast-forward)` commit created by `operations::fast_forward` on top of `src_eff` (`Z`); target's `@` lands at `Nt`. `Ns` is the step-forward commit created by `step_head` on the source side, also a child of `Z`. `Nt` and `Ns` are siblings under `Z`. The target's old chain (`A → B → C`) is no longer reachable from `tgt@`.
+`Nt` is the `(dojo::fast-forward)` commit created by `operations::fast_forward` on top of `src_eff` (`Z`); target's `@` lands at `Nt`. `Ns` is the step-forward commit created by `step_head` on the source side, also a child of `Z`. `Nt` and `Ns` are siblings under `Z`. The target's old chain (`A → B → C`) is no longer reachable from `tgt@`.
 
 ### Transfer: fast-forward-source
 
 ```
-ji transfer [target] --method fast-forward-source
+dojo transfer [target] --method fast-forward-source
 ```
 
 Mirror of `fast-forward-target`: fast-forward the source to the target's effective head, then step the target forward. Adaptive chooses it when the sync mode is `TargetOnly`. Forcing it in `SourceOnly` or `Diverged` leaves the source's previous chain as an anonymous branch.
@@ -182,9 +182,9 @@ Mirror of `fast-forward-target`: fast-forward the source to the target's effecti
 **Commands:**
 
 ```bash
-[{src}] jj new -m "(ji::fast-forward) {src}@ to {tgt}@{tgt_eff}" -- {tgt_eff}
+[{src}] jj new -m "(dojo::fast-forward) {src}@ to {tgt}@{tgt_eff}" -- {tgt_eff}
 jj abandon -- {src_trivial}             # only if the source had a trivial head pre-op
-[{tgt}] jj new -m "(ji::step-forward)"  # skipped if tgt@ is already a trivial head
+[{tgt}] jj new -m "(dojo::step-forward)"  # skipped if tgt@ is already a trivial head
 ```
 
 **Diagram:** mirror of [`fast-forward-target`](#transfer-fast-forward-target) with `src` and `tgt` swapped.
@@ -192,7 +192,7 @@ jj abandon -- {src_trivial}             # only if the source had a trivial head 
 ### Transfer: rebase
 
 ```
-ji transfer [target] --method rebase
+dojo transfer [target] --method rebase
 ```
 
 Rebase the source's unique chain onto the target's effective head, producing linear history. Only the target is stepped forward; the source stays at the rebased position of its original effective head.
@@ -203,7 +203,7 @@ Rebase the source's unique chain onto the target's effective head, producing lin
 
 ```bash
 jj rebase --source "roots({lca}..{src_eff})" --onto {tgt_eff}
-[{tgt}] jj new -m "(ji::step-forward)"   # skipped if tgt@ is already a trivial head
+[{tgt}] jj new -m "(dojo::step-forward)"   # skipped if tgt@ is already a trivial head
 ```
 
 `jj rebase --source <revset>` rebases the given revisions *and their descendants*. `roots({lca}..{src_eff})` selects the first commits after the LCA on the source's path; rebasing them and their descendants moves the entire source chain onto `tgt_eff`.
@@ -225,7 +225,7 @@ After: the source chain is replayed on top of `C` (`tgt_eff`). `src@` is at `Z'`
 ### Transfer: merge-squash
 
 ```
-ji transfer [target] --method merge-squash
+dojo transfer [target] --method merge-squash
 ```
 
 Squash the source's unique chain into a single commit (change ID of the first unique commit is preserved), then create a confluence merge between the squashed commit and the target's effective head, then step both workspaces forward.
@@ -236,15 +236,15 @@ Squash the source's unique chain into a single commit (change ID of the first un
 
 ```bash
 # X = latest(roots({lca}..{src_eff})) — the first commit after the LCA on src's path.
-jj squash --from "{lca}..{src_eff}" --into {X} --message "(ji::squash) ..."
+jj squash --from "{lca}..{src_eff}" --into {X} --message "(dojo::squash) ..."
 
-[{src}] jj new -m "(ji::merge) {src}@{X} + {tgt}@{tgt_eff}" -- {X} {tgt_eff}
-[{src}] jj new -m "(ji::step-forward)"
-[{tgt}] jj new -m "(ji::step-forward)" -- {merge_id}
+[{src}] jj new -m "(dojo::merge) {src}@{X} + {tgt}@{tgt_eff}" -- {X} {tgt_eff}
+[{src}] jj new -m "(dojo::step-forward)"
+[{tgt}] jj new -m "(dojo::step-forward)" -- {merge_id}
 jj abandon -- {src_trivial} {tgt_trivial}    # only the trivials that existed pre-op
 ```
 
-The squash uses `jj squash --into X` where `X = roots({lca}..{src_eff})` — the first commit after the LCA on the source's path. This preserves `X`'s change ID and collapses the rest of the source chain (`Y`, `Z`) into it. The squash message is a structured multi-section string that preserves each original revision's description under `### (ji::squash) revision N of M ...` headers.
+The squash uses `jj squash --into X` where `X = roots({lca}..{src_eff})` — the first commit after the LCA on the source's path. This preserves `X`'s change ID and collapses the rest of the source chain (`Y`, `Z`) into it. The squash message is a structured multi-section string that preserves each original revision's description under `### (dojo::squash) revision N of M ...` headers.
 
 **Diagram:**
 
@@ -264,7 +264,7 @@ s@:      X* ---↗ ↳ Ns
 ### Transfer: adaptive
 
 ```
-ji transfer [target] --method adaptive     # default
+dojo transfer [target] --method adaptive     # default
 ```
 
 See [adaptive resolution](#adaptive-resolution). Resolves to `fast-forward-target`, `fast-forward-source`, or `merge` based on the sync mode.
@@ -273,12 +273,12 @@ See [adaptive resolution](#adaptive-resolution). Resolves to `fast-forward-targe
 
 ## Close methods
 
-`ji close` integrates the source's work into the target (or, for `detach`/`abandon`, discards it) and then forgets the source workspace.
+`dojo close` integrates the source's work into the target (or, for `detach`/`abandon`, discards it) and then forgets the source workspace.
 
 ### Close: merge
 
 ```
-ji close <target> --method merge
+dojo close <target> --method merge
 ```
 
 Forget the source, then create a merge commit in the target workspace whose parents are the two effective heads. Unlike `transfer --method merge`, there is no step-forward after the merge — the target's `@` is exactly the merge commit.
@@ -290,7 +290,7 @@ Forget the source, then create a merge commit in the target workspace whose pare
 ```bash
 [{src}] jj util snapshot                                  # capture pending edits
 jj workspace forget -- {src_name}
-[{tgt}] jj new -m "(ji::merge) {src}@{src_eff} + {tgt}@{tgt_eff}" -- {src_eff} {tgt_eff}
+[{tgt}] jj new -m "(dojo::merge) {src}@{src_eff} + {tgt}@{tgt_eff}" -- {src_eff} {tgt_eff}
 jj abandon -- {src_trivial} {tgt_trivial}                 # only the trivials that existed pre-op
 ```
 
@@ -312,7 +312,7 @@ t@:  A → B → C  →  M
 ### Close: squash-merge
 
 ```
-ji close <target> --method squash-merge
+dojo close <target> --method squash-merge
 ```
 
 Forget the source, squash its unique chain, then merge the squashed commit with the target. The target's `@` is the merge commit.
@@ -324,8 +324,8 @@ Forget the source, squash its unique chain, then merge the squashed commit with 
 ```bash
 [{src}] jj util snapshot
 jj workspace forget -- {src_name}
-jj squash --from "{lca}..{src_eff}" --into {X} --message "(ji::squash) ..."
-[{tgt}] jj new -m "(ji::merge) {src}@{X} + {tgt}@{tgt_eff}" -- {X} {tgt_eff}
+jj squash --from "{lca}..{src_eff}" --into {X} --message "(dojo::squash) ..."
+[{tgt}] jj new -m "(dojo::merge) {src}@{X} + {tgt}@{tgt_eff}" -- {X} {tgt_eff}
 jj abandon -- {src_trivial} {tgt_trivial}   # only the trivials that existed pre-op
 ```
 
@@ -345,7 +345,7 @@ t@:  A → B → C → M
 ### Close: fast-forward
 
 ```
-ji close <target> --method fast-forward
+dojo close <target> --method fast-forward
 ```
 
 Forget the source, then fast-forward the target to the source's effective head.
@@ -361,7 +361,7 @@ jj workspace forget -- {src_name}
 jj abandon -- {tgt_trivial}                 # only if the target had a trivial head pre-op
 ```
 
-Unlike `transfer --method fast-forward-target`, there is no new `(ji::fast-forward)` commit. Because the source is being forgotten, `tgt@` can land directly on `src_eff` with `jj edit` — no need for a fresh leaf to keep the two workspaces off the same `@`.
+Unlike `transfer --method fast-forward-target`, there is no new `(dojo::fast-forward)` commit. Because the source is being forgotten, `tgt@` can land directly on `src_eff` with `jj edit` — no need for a fresh leaf to keep the two workspaces off the same `@`.
 
 **Diagram (typical case: target at LCA):**
 
@@ -378,10 +378,10 @@ t@:  A → X → Y → Z
 ### Close: detach
 
 ```
-ji close --method detach
+dojo close --method detach
 ```
 
-Forget the source workspace without touching meaningful revisions. After applying the selected bookmark policy, ji abandons the unreferenced trivial heads it skipped when resolving the effective head. A trivial head retained by a non-singular `NoAction` bookmark remains in the graph.
+Forget the source workspace without touching meaningful revisions. After applying the selected bookmark policy, dojo abandons the unreferenced trivial heads it skipped when resolving the effective head. A trivial head retained by a non-singular `NoAction` bookmark remains in the graph.
 
 **Available in:** any sync mode. No target is required.
 
@@ -411,7 +411,7 @@ The meaningful source revisions (`X → Y → Z`) still live in the graph as an 
 ### Close: abandon
 
 ```
-ji close --method abandon
+dojo close --method abandon
 ```
 
 Forget the source workspace *and* abandon every revision in its chain. Use this to throw away work entirely.
@@ -426,7 +426,7 @@ jj workspace forget -- {src_name}
 jj abandon -- {rev1} {rev2} ... {revN}   # every revision in the source workspace's chain
 ```
 
-The abandon list is the revision chain ji already fetched for the workspace (the same list displayed in the TUI workspace info panel). ji caps the abandon call at 50 revisions as a safety measure (`MAX_DESTRUCTIVE_REVISIONS`).
+The abandon list is the revision chain dojo already fetched for the workspace (the same list displayed in the TUI workspace info panel). dojo caps the abandon call at 50 revisions as a safety measure (`MAX_DESTRUCTIVE_REVISIONS`).
 
 **Diagram:**
 
@@ -441,7 +441,7 @@ t@: A → B → C    (unchanged)
 ### Close: adaptive
 
 ```
-ji close <target> --method adaptive     # default
+dojo close <target> --method adaptive     # default
 ```
 
 See [adaptive resolution](#adaptive-resolution). Resolves to `fast-forward` or `merge` based on the sync mode. `InSync` and `TargetOnly` are unavailable.
@@ -450,22 +450,22 @@ See [adaptive resolution](#adaptive-resolution). Resolves to `fast-forward` or `
 
 ## Bookmark actions on close
 
-A workspace usually carries one or more bookmarks. ji splits them into two groups:
+A workspace usually carries one or more bookmarks. dojo splits them into two groups:
 
-- **Singular bookmark** — the bookmark whose name matches the workspace's `{{ bookmark }}` template value. ji manages it automatically during close, transfer, and sync; see the table below.
+- **Singular bookmark** — the bookmark whose name matches the workspace's `{{ bookmark }}` template value. dojo manages it automatically during close, transfer, and sync; see the table below.
 - **Non-singular bookmarks** — every other bookmark on the workspace.
 
 ### Singular bookmark, automatic behavior
 
 | Operation | Source singular bookmark | Target singular bookmark |
 |---|---|---|
-| `ji sync` (Done) | advance to source's `@` | advance to target's `@` |
-| `ji transfer` (any method, Done) | advance to source's `@` | advance to target's `@` |
-| `ji close --method merge` | advance to source's effective head | advance to target's `@` |
-| `ji close --method squash-merge` | advance to source's effective head | advance to target's `@` |
-| `ji close --method fast-forward` | advance to source's effective head | advance to target's `@` |
-| `ji close --method detach` | advance to source's effective head | not touched |
-| `ji close --method abandon` | **deleted** | not touched |
+| `dojo sync` (Done) | advance to source's `@` | advance to target's `@` |
+| `dojo transfer` (any method, Done) | advance to source's `@` | advance to target's `@` |
+| `dojo close --method merge` | advance to source's effective head | advance to target's `@` |
+| `dojo close --method squash-merge` | advance to source's effective head | advance to target's `@` |
+| `dojo close --method fast-forward` | advance to source's effective head | advance to target's `@` |
+| `dojo close --method detach` | advance to source's effective head | not touched |
+| `dojo close --method abandon` | **deleted** | not touched |
 
 ### Non-singular bookmarks
 
@@ -477,7 +477,7 @@ The **TUI** close dialog exposes a per-close bookmark action for non-singular bo
 | `Advance` | Move every affected bookmark to the target workspace's change ID |
 | `Delete` | Delete every affected bookmark |
 
-The **CLI** (`ji close`) always uses `NoAction` for non-singular bookmarks — there is no CLI flag to choose `Advance` or `Delete`. If you want those actions on non-singular bookmarks as part of a CLI close, run the equivalent `jj bookmark set` / `jj bookmark delete` commands after `ji close` returns.
+The **CLI** (`dojo close`) always uses `NoAction` for non-singular bookmarks — there is no CLI flag to choose `Advance` or `Delete`. If you want those actions on non-singular bookmarks as part of a CLI close, run the equivalent `jj bookmark set` / `jj bookmark delete` commands after `dojo close` returns.
 
 ---
 
@@ -485,7 +485,7 @@ The **CLI** (`ji close`) always uses `NoAction` for non-singular bookmarks — t
 
 ### Staleness resolution
 
-Because ji runs most jj calls with `--ignore-working-copy` (see [the note above](#a-note-on---ignore-working-copy)), workspaces in the repository can end up stale when ji rewrites shared state. Pending edits are protected by the [pre-execution protection snapshot](#pre-execution-protection-snapshot); for the staleness itself, each operation does two things:
+Because dojo runs most jj calls with `--ignore-working-copy` (see [the note above](#a-note-on---ignore-working-copy)), workspaces in the repository can end up stale when dojo rewrites shared state. Pending edits are protected by the [pre-execution protection snapshot](#pre-execution-protection-snapshot); for the staleness itself, each operation does two things:
 
 1. **Update the workspaces it directly touched.** Transfer and sync call `jj workspace update-stale` on both source and target after the operation. Close variants that keep the target (`merge`, `squash-merge`, `fast-forward`) call it on the target only. Disposal variants (`detach`, `abandon`) don't call it — the source is being forgotten, and the target is unchanged. Close and transfer additionally resolve third-party workspaces that the rewrite was predicted to stale — except workspaces that were already stale before the operation (those are left to the user's `update-stale` workflow).
 2. **Report workspaces that remain stale.** The pre-operation baseline is the set of workspaces the protection snapshot skipped as already stale; after the operation, all workspaces are re-checked. Any workspace still stale at the end is reported:
@@ -496,8 +496,8 @@ Because ji runs most jj calls with `--ignore-working-copy` (see [the note above]
 
 ### Delete files (close only)
 
-`ji close --delete-files` (CLI) or the `k` toggle in the TUI close dialog triggers `rm -rf` on the source workspace directory *after* the jj-level close succeeds. In the TUI this is gated behind an additional confirmation prompt; in the CLI it runs unconditionally. If the deleted directory was the current working directory, ji writes a `cd <repo_root>` directive to the [shell wrapper](shell-integration.md) so the parent shell leaves the deleted directory.
+`dojo close --delete-files` (CLI) or the `k` toggle in the TUI close dialog triggers `rm -rf` on the source workspace directory *after* the jj-level close succeeds. In the TUI this is gated behind an additional confirmation prompt; in the CLI it runs unconditionally. If the deleted directory was the current working directory, dojo writes a `cd <repo_root>` directive to the [shell wrapper](shell-integration.md) so the parent shell leaves the deleted directory.
 
 ### Author override
 
-When `ji-author` is set in `.config/ji.toml`, every new revision ji creates in these operations is immediately rewritten with `jj metaedit --author` to use the configured author. See [`ji-author` in configuration.md](configuration.md#ji-author--string-optional). This keeps ji's helper revisions (step-forward, fast-forward markers, merge commits, squash commits) separate from your personal author identity in `jj log --filter 'author(me)'`.
+When `dojo-author` is set in `.config/dojo.toml`, every new revision dojo creates in these operations is immediately rewritten with `jj metaedit --author` to use the configured author. See [`dojo-author` in configuration.md](configuration.md#dojo-author--string-optional). This keeps dojo's helper revisions (step-forward, fast-forward markers, merge commits, squash commits) separate from your personal author identity in `jj log --filter 'author(me)'`.

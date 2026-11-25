@@ -1,12 +1,12 @@
-//! macOS alias / xattr / link fidelity across ji workspace operations.
+//! macOS alias / xattr / link fidelity across dojo workspace operations.
 //!
 //! These tests pin the fidelity contract: Finder aliases (regular files
 //! whose data fork is bookmark data plus a `com.apple.FinderInfo` xattr
 //! carrying the kIsAlias flag), symlinks, and hard-linked file content
-//! survive `ji` create/close/transfer, and ji warns where fidelity cannot
+//! survive `dojo` create/close/transfer, and dojo warns where fidelity cannot
 //! be preserved. A passing run confirms correct behavior; corruption fails
 //! the suite. Hard-link *identity* is unrepresentable in jj's git object
-//! model, so those tests assert content preservation plus ji's
+//! model, so those tests assert content preservation plus dojo's
 //! "hard link broken" warning, never inode identity.
 //!
 //! Requirements (same as the other jj-backed suites): `jj` and `git` on
@@ -17,14 +17,17 @@
 //! programmatically set FinderInfo xattr. Corruption is xattr loss, so
 //! nothing here needs Finder or resolvable bookmark data.
 
+// Finder-alias helpers are used only by the macOS-gated tests.
+#![cfg_attr(not(target_os = "macos"), allow(dead_code))]
+
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use tempfile::TempDir;
 
-use ji::commands;
-use ji::commands::types::{BookmarkAction, CloseMethod, CloseTransferResult, TransferMethod};
-use ji::config::Config;
-use ji::finder_xattrs::{BOOKMARK_MAGIC, FINDER_INFO_XATTR, finder_info_marks_alias, get_xattr};
+use dojo::commands;
+use dojo::commands::types::{BookmarkAction, CloseMethod, CloseTransferResult, TransferMethod};
+use dojo::config::Config;
+use dojo::finder_xattrs::{BOOKMARK_MAGIC, FINDER_INFO_XATTR, finder_info_marks_alias, get_xattr};
 
 // ---------------------------------------------------------------------------
 // Test harness (per-binary inline harness, mirroring tests/jj_integration.rs)
@@ -120,7 +123,7 @@ fn bookmark_content(payload: &[u8]) -> Vec<u8> {
 /// FinderInfo xattr. No Finder involvement needed.
 fn write_synthetic_alias(path: &Path, payload: &[u8]) {
     std::fs::write(path, bookmark_content(payload)).unwrap();
-    ji::finder_xattrs::set_xattr(path, FINDER_INFO_XATTR, &alias_finder_info()).unwrap();
+    dojo::finder_xattrs::set_xattr(path, FINDER_INFO_XATTR, &alias_finder_info()).unwrap();
 }
 
 fn strip_finder_info(path: &Path) {
@@ -187,7 +190,7 @@ fn assert_no_alias_flag(path: &Path) {
 }
 
 // ---------------------------------------------------------------------------
-// ji operation helpers (library-level, the same entry points the CLI uses)
+// dojo operation helpers (library-level, the same entry points the CLI uses)
 // ---------------------------------------------------------------------------
 
 fn ji_create(repo: &TestRepo, config: &Config, name: &str) -> commands::types::CreateResult {
@@ -212,7 +215,7 @@ fn ji_create_at(
         &format!("{name} start"),
         false,
     )
-    .expect("ji create")
+    .expect("dojo create")
 }
 
 fn merge_close(repo: &TestRepo, ws_name: &str, ws_path: &Path) -> CloseTransferResult {
@@ -281,6 +284,7 @@ fn symlink_survives_workspace_create() {
 
 /// A Finder alias in the source workspace keeps its data fork AND its
 /// FinderInfo xattr in the newly created workspace.
+#[cfg(target_os = "macos")]
 #[test]
 fn alias_finder_info_survives_workspace_create() {
     assert!(
@@ -305,6 +309,7 @@ fn alias_finder_info_survives_workspace_create() {
 /// An alias retargeted in the workspace (data fork rewritten) merges back
 /// into the target with the new data fork and an intact alias flag — even
 /// when the workspace copy itself lost its xattr along the way.
+#[cfg(target_os = "macos")]
 #[test]
 fn retargeted_alias_survives_merge_close() {
     let repo = TestRepo::new();
@@ -336,6 +341,7 @@ fn retargeted_alias_survives_merge_close() {
 
 /// A brand-new alias created in the workspace arrives in the target with
 /// its alias flag (cross-workspace exact-content restore).
+#[cfg(target_os = "macos")]
 #[test]
 fn new_alias_created_in_workspace_reaches_target_on_close() {
     let repo = TestRepo::new();
@@ -358,6 +364,7 @@ fn new_alias_created_in_workspace_reaches_target_on_close() {
 
 /// An alias retargeted in default@ AFTER the workspace was created reaches
 /// the workspace with data fork and alias flag intact on transfer.
+#[cfg(target_os = "macos")]
 #[test]
 fn alias_changed_in_default_survives_transfer_to_workspace() {
     let repo = TestRepo::new();
@@ -412,7 +419,7 @@ fn plain_file_replacing_alias_does_not_gain_alias_flag() {
 
 /// Hard-link CONTENT survives workspace creation. Link identity (shared
 /// inode) is unrepresentable in jj's git object model and is deliberately
-/// not asserted — ji's contract for identity is the warning, tested below.
+/// not asserted — dojo's contract for identity is the warning, tested below.
 #[test]
 fn hard_link_content_survives_create() {
     let repo = TestRepo::new();
@@ -456,8 +463,9 @@ fn broken_hard_link_warns_on_create() {
 
 /// Documented limitation: xattrs exist only on disk. An alias that lives
 /// only in an old revision — deleted from every current checkout — has no
-/// metadata oracle; ji materializes the data fork, warns, and cannot
+/// metadata oracle; dojo materializes the data fork, warns, and cannot
 /// restore the flag.
+#[cfg(target_os = "macos")]
 #[test]
 fn alias_without_disk_oracle_warns_on_create() {
     let repo = TestRepo::new();
@@ -490,6 +498,7 @@ fn alias_without_disk_oracle_warns_on_create() {
 
 /// `preserve-finder-xattrs = false` disables the restore writes but keeps
 /// the fidelity warnings (detect & warn stands alone).
+#[cfg(target_os = "macos")]
 #[test]
 fn fixup_disabled_by_config_still_warns() {
     let repo = TestRepo::new();

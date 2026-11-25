@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
-# Scaffolds a jj repo with workspaces created through ji for manual TUI testing.
+# Scaffolds a jj repo with workspaces created through dojo for manual TUI testing.
 # Usage: task playground
 set -euo pipefail
-export JI_LOG=1
+export DOJO_LOG=1
 
 DIR="$(mktemp -d)"
 DIRECTIVE="$(mktemp)"
@@ -35,14 +35,14 @@ echo "handle errors" > errors.txt
 jj describe -m "fifth: error handling"
 jj new -m "wip"
 
-# --- init ji config ---
-JI_DIRECTIVE_FILE="$DIRECTIVE" command ji init
-cat > .config/ji.toml << 'TOML'
+# --- init dojo config ---
+DOJO_DIRECTIVE_FILE="$DIRECTIVE" command dojo init
+cat > .config/dojo.toml << 'TOML'
 workspace-path = "../../workspaces/{{ repo }}.{{ bookmark }}"
 TOML
 
-# --- create workspaces through ji ---
-JI_DIRECTIVE_FILE="$DIRECTIVE" command ji new feature/alpha --revision main -m "alpha start"
+# --- create workspaces through dojo ---
+DOJO_DIRECTIVE_FILE="$DIRECTIVE" command dojo new feature/alpha --revision main -m "alpha start"
 cd "$DIR/workspaces/eg.feature-alpha"
 jj new -m "alpha: add widget"
 echo "widget" > widget.txt
@@ -53,7 +53,7 @@ jj describe -m "alpha: refine widget"
 jj new -m "wip"
 
 cd "$REPO"
-JI_DIRECTIVE_FILE="$DIRECTIVE" command ji new feature/beta --revision main -m "beta start"
+DOJO_DIRECTIVE_FILE="$DIRECTIVE" command dojo new feature/beta --revision main -m "beta start"
 cd "$DIR/workspaces/eg.feature-beta"
 jj new -m "beta: scaffolding"
 echo "scaffold" > scaffold.txt
@@ -67,17 +67,17 @@ jj describe -m "beta: tests"
 jj new -m "wip"
 
 cd "$REPO"
-JI_DIRECTIVE_FILE="$DIRECTIVE" command ji new hotfix/sec-123 --revision main -m "hotfix start"
+DOJO_DIRECTIVE_FILE="$DIRECTIVE" command dojo new hotfix/sec-123 --revision main -m "hotfix start"
 cd "$DIR/workspaces/eg.hotfix-sec-123"
 jj new -m "hotfix: patch security vuln"
 echo "patch" > patch.txt
 jj describe -m "hotfix: patch security vuln"
 
 cd "$REPO"
-JI_DIRECTIVE_FILE="$DIRECTIVE" command ji new scratch --revision main -m "scratch workspace"
+DOJO_DIRECTIVE_FILE="$DIRECTIVE" command dojo new scratch --revision main -m "scratch workspace"
 
 cd "$REPO"
-JI_DIRECTIVE_FILE="$DIRECTIVE" command ji new feature/deep --revision @ -m "deep start"
+DOJO_DIRECTIVE_FILE="$DIRECTIVE" command dojo new feature/deep --revision @ -m "deep start"
 cd "$DIR/workspaces/eg.feature-deep"
 jj new -m "deep: schema design"
 echo "schema v1" > schema.txt
@@ -91,7 +91,7 @@ jj describe -m "deep: seed data"
 jj new -m "wip"
 
 cd "$REPO"
-JI_DIRECTIVE_FILE="$DIRECTIVE" command ji new experiment/stale --revision @--- -m "stale experiment"
+DOJO_DIRECTIVE_FILE="$DIRECTIVE" command dojo new experiment/stale --revision @--- -m "stale experiment"
 
 # --- done ---
 echo ""
@@ -99,4 +99,4 @@ echo "=== Playground ready ==="
 echo "  repo:       $REPO"
 echo "  workspaces: $DIR/workspaces/"
 echo ""
-echo "  cd $REPO && ji"
+echo "  cd $REPO && dojo"

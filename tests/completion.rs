@@ -1,6 +1,6 @@
 //! Binary-level integration tests for dynamic workspace completion.
 //!
-//! Each test invokes the real `ji` binary through one of clap_complete's shell
+//! Each test invokes the real `dojo` binary through one of clap_complete's shell
 //! protocols from an isolated temporary jj repository. This deliberately
 //! asserts candidate output in addition to exit status because completion is
 //! fail-soft: a lookup regression can otherwise return success with no output.
@@ -144,7 +144,7 @@ impl CompletionRepo {
     }
 
     fn complete(&self, shell: Shell) -> Output {
-        let mut command = Command::new(env!("CARGO_BIN_EXE_ji"));
+        let mut command = Command::new(env!("CARGO_BIN_EXE_dojo"));
         self.configure_env(&mut command);
         for variable in [
             "COMPLETE",
@@ -157,8 +157,8 @@ impl CompletionRepo {
         }
         shell.configure(&mut command);
         command
-            .args(["--", "ji", "switch", ""])
-            .env_remove("JI_DIRECTIVE_FILE")
+            .args(["--", "dojo", "switch", ""])
+            .env_remove("DOJO_DIRECTIVE_FILE")
             .stdin(Stdio::null())
             .output()
             .unwrap_or_else(|error| panic!("failed to run {} completion: {error}", shell.name()))

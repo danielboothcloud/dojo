@@ -378,12 +378,12 @@ fn shell_quote_word(word: &str) -> String {
 }
 
 /// Classify a non-zero exit from a jj subprocess. Detects the common
-/// "not in a jj repo" stderr substring and points the user at `ji init`.
+/// "not in a jj repo" stderr substring and points the user at `dojo init`.
 fn classify_jj_nonzero(args: &[&str], stderr: &[u8]) -> anyhow::Error {
     let stderr_str = String::from_utf8_lossy(stderr);
     if stderr_str.contains("There is no jj repo in") || stderr_str.contains("no jj repo") {
         anyhow::anyhow!(
-            "not inside a jj repository. Run `ji init` to create one, or cd into an existing jj repo.\n(jj stderr: {})",
+            "not inside a jj repository. Run `dojo init` to create one, or cd into an existing jj repo.\n(jj stderr: {})",
             stderr_str.trim()
         )
     } else {
@@ -393,7 +393,7 @@ fn classify_jj_nonzero(args: &[&str], stderr: &[u8]) -> anyhow::Error {
 
 /// Run a jj subprocess without a version check. Used by:
 /// - the bootstrap path (`workspace_root_by_name`) so shell-integration
-///   commands like `ji config shell install` don't require a working jj.
+///   commands like `dojo config shell install` don't require a working jj.
 /// - the version check itself (`jj_version()`), to avoid recursion.
 ///
 /// **stdout encoding invariant:** parsed as UTF-8 because jj structured
@@ -801,7 +801,7 @@ fn workspace_root_by_name(name: Option<&str>) -> Result<PathBuf> {
     // Bootstrap path: this runs at process startup (before we know whether
     // the caller's command needs a jj repo) and from main.rs's logger-init
     // probe. Use `run_jj_raw` to skip the version check — shell-integration
-    // commands like `ji config shell install` must succeed without a working
+    // commands like `dojo config shell install` must succeed without a working
     // jj binary.
     let mut args: Vec<&str> = vec!["workspace", "root"];
     if let Some(n) = name {
@@ -1013,7 +1013,7 @@ fn parse_completion_workspaces(stdout: &str) -> Vec<CompletionWorkspace> {
     out
 }
 
-/// Local bookmark names with their commit's committer timestamp, for `ji new`
+/// Local bookmark names with their commit's committer timestamp, for `dojo new`
 /// completion — one non-mutating bootstrap subprocess under a bounded timeout.
 /// Local only: `local_bookmarks` is a `jj log` template keyword (not valid in
 /// `jj bookmark list --template`), and a commit matched by `bookmarks()` that
@@ -1976,7 +1976,7 @@ fn stale_workspace_diff_inner(
             let name = entry.file_name();
             let name_str = name.to_string_lossy();
             // Skip VCS internals.
-            if name_str == ".jj" || name_str == ".git" || name_str == ".ji" {
+            if name_str == ".jj" || name_str == ".git" || name_str == ".dojo" {
                 continue;
             }
             let path = entry.path();

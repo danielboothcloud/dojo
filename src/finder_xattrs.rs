@@ -49,12 +49,45 @@ pub fn finder_info_marks_alias(info: &[u8]) -> bool {
 }
 
 pub fn get_xattr(path: &Path, name: &str) -> Result<Option<Vec<u8>>> {
-    xattr::get(path, name).with_context(|| format!("reading xattr {name} on {}", path.display()))
+    xa::get(path, name).with_context(|| format!("reading xattr {name} on {}", path.display()))
 }
 
 pub fn set_xattr(path: &Path, name: &str, value: &[u8]) -> Result<()> {
-    xattr::set(path, name, value)
+    xa::set(path, name, value)
         .with_context(|| format!("writing xattr {name} on {}", path.display()))
+}
+
+/// Whether Finder metadata handling is active on this platform. Finder
+/// aliases and resource forks exist only on macOS; elsewhere the xattr
+/// capture/restore is a silent no-op (hard-link checks still run).
+pub const FINDER_METADATA_SUPPORTED: bool = cfg!(target_os = "macos");
+
+#[cfg(target_os = "macos")]
+mod xa {
+    use std::path::Path;
+
+    pub(super) fn get(path: &Path, name: &str) -> std::io::Result<Option<Vec<u8>>> {
+        xattr::get(path, name)
+    }
+
+    pub(super) fn set(path: &Path, name: &str, value: &[u8]) -> std::io::Result<()> {
+        xattr::set(path, name, value)
+    }
+}
+
+#[cfg(not(target_os = "macos"))]
+mod xa {
+    use std::path::Path;
+
+    #[allow(clippy::unnecessary_wraps)]
+    pub(super) fn get(_path: &Path, _name: &str) -> std::io::Result<Option<Vec<u8>>> {
+        Ok(None)
+    }
+
+    #[allow(clippy::unnecessary_wraps)]
+    pub(super) fn set(_path: &Path, _name: &str, _value: &[u8]) -> std::io::Result<()> {
+        Ok(())
+    }
 }
 
 /// One workspace's pre-operation record of a Finder-metadata-bearing file.
@@ -124,8 +157,8 @@ impl XattrGuard {
                 },
             );
         }
-        let finder_info = xattr::get(&path, FINDER_INFO_XATTR).ok().flatten();
-        let resource_fork = xattr::get(&path, RESOURCE_FORK_XATTR).ok().flatten();
+        let finder_info = xa::get(&path, FINDER_INFO_XATTR).ok().flatten();
+        let resource_fork = xa::get(&path, RESOURCE_FORK_XATTR).ok().flatten();
         if finder_info.is_none() && resource_fork.is_none() {
             return;
         }
@@ -201,6 +234,9 @@ impl XattrGuard {
     }
 
     fn process_file(&self, ws_name: &str, ws_path: &Path, rel: &str, warnings: &mut Vec<String>) {
+        if !FINDER_METADATA_SUPPORTED {
+            return;
+        }
         let path = ws_path.join(rel);
         let Ok(meta) = path.symlink_metadata() else {
             return;
@@ -213,7 +249,7 @@ impl XattrGuard {
         // Presence short-circuit: jj's rewrite is always remove + create-new,
         // stripping every xattr, so existing Finder metadata means jj never
         // touched this file — leave it alone.
-        if matches!(xattr::get(&path, FINDER_INFO_XATTR), Ok(Some(_))) {
+        if matches!(xa::get(&path, FINDER_INFO_XATTR), Ok(Some(_))) {
             return;
         }
         let candidates = self.candidates.get(rel).map_or(&[][..], Vec::as_slice);
@@ -416,6 +452,7 @@ mod tests {
         content
     }
 
+    #[cfg(target_os = "macos")]
     #[test]
     fn restore_applies_finder_info_on_exact_content_match() {
         let dir = tempfile::tempdir().unwrap();
@@ -430,6 +467,7 @@ mod tests {
         assert!(finder_info_marks_alias(&info));
     }
 
+    #[cfg(target_os = "macos")]
     #[test]
     fn restore_applies_flag_only_on_retargeted_bookmark() {
         let dir = tempfile::tempdir().unwrap();
@@ -463,6 +501,7 @@ mod tests {
         );
     }
 
+    #[cfg(target_os = "macos")]
     #[test]
     fn restore_disabled_warns_instead_of_writing() {
         let dir = tempfile::tempdir().unwrap();
@@ -481,6 +520,7 @@ mod tests {
         );
     }
 
+    #[cfg(target_os = "macos")]
     #[test]
     fn restore_skips_file_with_existing_finder_info() {
         let dir = tempfile::tempdir().unwrap();
@@ -502,6 +542,7 @@ mod tests {
         );
     }
 
+    #[cfg(target_os = "macos")]
     #[test]
     fn orphan_bookmark_data_warns() {
         let dir = tempfile::tempdir().unwrap();

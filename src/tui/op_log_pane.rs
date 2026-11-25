@@ -9,8 +9,8 @@ const GUTTER_W: usize = 2;
 const ID_W: usize = 13;
 const TIME_W: usize = 6;
 
-/// Colors for ji action chunks, cycling through this palette.
-const JI_COLORS: &[Color] = &[
+/// Colors for dojo action chunks, cycling through this palette.
+const DOJO_COLORS: &[Color] = &[
     Color::Blue,
     Color::Green,
     Color::Magenta,
@@ -41,7 +41,7 @@ pub(crate) struct OpLogPane {
     list_visible_height: u16,
     /// Pre/post op ID pairs from the action history, for coloring.
     action_ranges: Vec<(String, String)>,
-    /// Per-filtered-index color: None = not a ji action, Some(idx) = JI_COLORS index.
+    /// Per-filtered-index color: None = not a dojo action, Some(idx) = DOJO_COLORS index.
     color_map: Vec<Option<usize>>,
 }
 
@@ -159,9 +159,9 @@ impl OpLogPane {
                 // Newest-first: post_i <= pre_i. Mark post_i..pre_i (exclusive of pre).
                 let start = post_i.min(pre_i);
                 let end = post_i.max(pre_i);
-                let color_idx = action_idx % JI_COLORS.len();
-                for i in start..end {
-                    self.color_map[i] = Some(color_idx);
+                let color_idx = action_idx % DOJO_COLORS.len();
+                for slot in &mut self.color_map[start..end] {
+                    *slot = Some(color_idx);
                 }
             }
         }
@@ -353,12 +353,12 @@ impl OpLogPane {
                     Style::default()
                 };
 
-                // ID color: grey for snapshots, cycling ji color for action
+                // ID color: grey for snapshots, cycling dojo color for action
                 // ranges, yellow for everything else.
                 let id_style = if op.is_snapshot {
                     Style::default().fg(Color::DarkGray)
                 } else if let Some(ci) = self.color_map.get(fi).copied().flatten() {
-                    Style::default().fg(JI_COLORS[ci])
+                    Style::default().fg(DOJO_COLORS[ci])
                 } else {
                     Style::default().fg(Color::Yellow)
                 };

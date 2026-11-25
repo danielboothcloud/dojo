@@ -126,13 +126,13 @@ mod tests {
 
     #[test]
     fn empty_hints_yield_no_lines() {
-        assert!(wrap_hints(vec![], 80).is_empty());
+        assert_eq!(wrap_hints(vec![], 80).len(), 0);
     }
 
     #[test]
     fn zero_width_yields_no_lines() {
         let hints = vec![key_pair("?", " help  ")];
-        assert!(wrap_hints(hints, 0).is_empty());
+        assert_eq!(wrap_hints(hints, 0).len(), 0);
     }
 
     #[test]

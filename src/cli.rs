@@ -1,4 +1,4 @@
-//! `clap` definitions for the `ji` binary. Lives in the library crate so the
+//! `clap` definitions for the `dojo` binary. Lives in the library crate so the
 //! `xtask` man-page/completion generator can build the `clap::Command` tree
 //! from the same source.
 
@@ -35,7 +35,7 @@ pub fn help_styles() -> Styles {
 }
 
 #[derive(Parser)]
-#[command(name = "ji", about = "Jujutsu workspace utilities")]
+#[command(name = "dojo", about = "Jujutsu workspace utilities")]
 #[command(version)]
 #[command(styles = help_styles())]
 pub struct Cli {
@@ -140,7 +140,7 @@ pub enum Commands {
 
 #[derive(Subcommand)]
 pub enum ConfigCommands {
-    /// Generate project config template (alias of `ji init`)
+    /// Generate project config template (alias of `dojo init`)
     Init,
 
     /// Shell integration
@@ -172,7 +172,7 @@ pub enum ShellCommands {
         dry_run: bool,
 
         /// Install even if integration is detected elsewhere, or overwrite
-        /// non-ji-managed files
+        /// non-dojo-managed files
         #[arg(long)]
         force: bool,
 
@@ -190,7 +190,7 @@ pub enum ShellCommands {
         #[arg(long)]
         dry_run: bool,
 
-        /// Remove non-ji-managed files too
+        /// Remove non-dojo-managed files too
         #[arg(long)]
         force: bool,
     },

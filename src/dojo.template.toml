@@ -1,5 +1,5 @@
-# ji project configuration
-# Location: .config/ji.toml (check into version control)
+# dojo project configuration
+# Location: .config/dojo.toml (check into version control)
 #
 # ============================================================================
 # Template variables
@@ -61,17 +61,17 @@
 # ============================================================================
 # Author Override
 # ============================================================================
-# Override the author on revisions created by ji.
+# Override the author on revisions created by dojo.
 # Format: "Name <email>"
 #
-# ji-author = "Jujutsu Gi <ji@null.com>"
+# dojo-author = "Jujutsu Gi <dojo@null.com>"
 #
 # ============================================================================
 # Finder alias fidelity
 # ============================================================================
 # jj stores only file content + mode; whenever it materializes or rewrites
 # working-copy files, macOS Finder metadata (com.apple.FinderInfo /
-# com.apple.ResourceFork) is stripped, which breaks Finder aliases. ji
+# com.apple.ResourceFork) is stripped, which breaks Finder aliases. dojo
 # restores that metadata after workspace operations. Set to false to disable
 # the restore writes (fidelity warnings are still reported).
 #

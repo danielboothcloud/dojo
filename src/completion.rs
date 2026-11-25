@@ -1,4 +1,4 @@
-//! Dynamic shell-completion providers for `ji`.
+//! Dynamic shell-completion providers for `dojo`.
 //!
 //! Driven by clap_complete's `unstable-dynamic` engine: at completion time the
 //! binary runs `CompleteEnv::try_complete` (see `main`), which invokes these
@@ -147,7 +147,7 @@ fn render_workspace_candidates(
 }
 
 /// Existing local bookmark names, annotated with `(<reltime>)`, for
-/// `ji new <bookmark>` (novel names remain free-form). No `*`/`x` — those are
+/// `dojo new <bookmark>` (novel names remain free-form). No `*`/`x` — those are
 /// workspace states.
 fn new_bookmark_candidates(current: &OsStr) -> Vec<CompletionCandidate> {
     let cur = current.to_string_lossy();
@@ -180,7 +180,7 @@ pub fn workspace_completer() -> ArgValueCompleter {
     ArgValueCompleter::new(workspace_candidates)
 }
 
-/// Completer for `ji new <bookmark>` (existing local bookmarks).
+/// Completer for `dojo new <bookmark>` (existing local bookmarks).
 pub fn new_bookmark_completer() -> ArgValueCompleter {
     ArgValueCompleter::new(new_bookmark_candidates)
 }

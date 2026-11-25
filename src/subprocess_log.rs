@@ -1,6 +1,6 @@
 //! Opt-in subprocess call logging.
 //!
-//! Set `JI_LOG=1` to log to `.ji/subprocess.log`, or `JI_LOG=<path>`
+//! Set `DOJO_LOG=1` to log to `.dojo/subprocess.log`, or `DOJO_LOG=<path>`
 //! for a custom location. No log rotation — delete the file manually.
 
 use std::io::{BufWriter, Write};
@@ -11,13 +11,13 @@ use std::time::{Duration, SystemTime};
 /// Holds the open log file, or `None` if logging is disabled or init failed.
 static LOG: OnceLock<Option<Mutex<BufWriter<std::fs::File>>>> = OnceLock::new();
 
-/// Initialize subprocess logging based on the `JI_LOG` environment variable.
+/// Initialize subprocess logging based on the `DOJO_LOG` environment variable.
 ///
-/// - `JI_LOG=1` → log to `repo_root/.ji/subprocess.log`
-/// - `JI_LOG=<path>` → log to that path
+/// - `DOJO_LOG=1` → log to `repo_root/.dojo/subprocess.log`
+/// - `DOJO_LOG=<path>` → log to that path
 /// - Unset or empty → no logging
 pub fn init(repo_root: &Path) {
-    let val = match std::env::var("JI_LOG") {
+    let val = match std::env::var("DOJO_LOG") {
         Ok(v) if !v.is_empty() => v,
         _ => {
             let _ = LOG.set(None);
@@ -26,12 +26,12 @@ pub fn init(repo_root: &Path) {
     };
 
     let path = if val == "1" {
-        if let Err(e) = crate::jj_utils::ensure_ji_dir(repo_root) {
-            eprintln!("(ji)::log: failed to create .ji directory: {e:#}");
+        if let Err(e) = crate::jj_utils::ensure_dojo_dir(repo_root) {
+            eprintln!("(dojo)::log: failed to create .dojo directory: {e:#}");
             let _ = LOG.set(None);
             return;
         }
-        repo_root.join(".ji").join("subprocess.log")
+        repo_root.join(".dojo").join("subprocess.log")
     } else {
         std::path::PathBuf::from(val)
     };
@@ -45,7 +45,7 @@ pub fn init(repo_root: &Path) {
             let _ = LOG.set(Some(Mutex::new(BufWriter::new(file))));
         }
         Err(e) => {
-            eprintln!("(ji)::log: cannot open {}: {e}", path.display());
+            eprintln!("(dojo)::log: cannot open {}: {e}", path.display());
             let _ = LOG.set(None);
         }
     }

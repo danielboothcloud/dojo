@@ -740,8 +740,8 @@ fn squash_all_but_root_collapses_linear_chain() {
 // validate_head_info, abandon-set verification (plan: happy-mapping-hinton)
 // ---------------------------------------------------------------------------
 
-use ji::commands::types::{BookmarkAction, CloseMethod, SyncMode, SyncModeInfo, TransferMethod};
-use ji::{commands, jj_utils, jujutsu};
+use dojo::commands::types::{BookmarkAction, CloseMethod, SyncMode, SyncModeInfo, TransferMethod};
+use dojo::{commands, jj_utils, jujutsu};
 
 /// Add a workspace at {tmp}/<name> branching from `rev`, returning its path.
 fn add_ws(repo: &TestRepo, name: &str, rev: &str) -> PathBuf {
@@ -1097,7 +1097,7 @@ fn make_stale(repo: &TestRepo, ws: &str, filename: &str) {
 
 /// Regression for the motivating incident: un-snapshotted edits in the
 /// target workspace must not end up stranded on an orphaned non-empty
-/// `(ji::…)` placeholder head when syncing.
+/// `(dojo::…)` placeholder head when syncing.
 #[test]
 fn sync_entry_snapshot_prevents_orphaned_placeholder() {
     let repo = TestRepo::new();
@@ -1110,14 +1110,14 @@ fn sync_entry_snapshot_prevents_orphaned_placeholder() {
     std::fs::write(feat.join("feat.txt"), "feat-work").unwrap();
     jj(&feat, &["describe", "-m", "F1: feature work"]);
 
-    // default @: an empty ji placeholder (the incident's resting state)…
+    // default @: an empty dojo placeholder (the incident's resting state)…
     jj(
         repo.root(),
         &[
             "new",
             &m0,
             "-m",
-            "(ji::fast-forward) default@ to feat@deadbeef",
+            "(dojo::fast-forward) default@ to feat@deadbeef",
         ],
     );
     // …with a pending on-disk edit that nothing has snapshotted yet.
@@ -1139,10 +1139,10 @@ fn sync_entry_snapshot_prevents_orphaned_placeholder() {
     )
     .expect("sync must succeed");
     match outcome {
-        ji::operations::SyncOutcome::Done { warnings } => {
+        dojo::operations::SyncOutcome::Done { warnings } => {
             assert!(warnings.is_empty(), "sync must not warn (got {warnings:?})");
         }
-        ji::operations::SyncOutcome::AlreadyInSync => panic!("workspaces were not in sync"),
+        dojo::operations::SyncOutcome::AlreadyInSync => panic!("workspaces were not in sync"),
     }
 
     // The stray edit must be reachable from default@…
@@ -1154,10 +1154,10 @@ fn sync_entry_snapshot_prevents_orphaned_placeholder() {
         shown, "reflow",
         "pending edit must ride along into default@"
     );
-    // …and no anonymous non-empty ji-placeholder head may remain.
+    // …and no anonymous non-empty dojo-placeholder head may remain.
     assert!(
-        !repo.rev_exists(r#"heads(all()) & description(glob:"(ji::*") ~ empty()"#),
-        "no orphaned non-empty (ji::…) head may exist after sync"
+        !repo.rev_exists(r#"heads(all()) & description(glob:"(dojo::*") ~ empty()"#),
+        "no orphaned non-empty (dojo::…) head may exist after sync"
     );
 }
 
@@ -1572,8 +1572,8 @@ fn sync_protection_preserves_third_party_edits() {
     )
     .expect("sync must succeed");
     let warnings = match outcome {
-        ji::operations::SyncOutcome::Done { warnings } => warnings,
-        ji::operations::SyncOutcome::AlreadyInSync => panic!("workspaces were not in sync"),
+        dojo::operations::SyncOutcome::Done { warnings } => warnings,
+        dojo::operations::SyncOutcome::AlreadyInSync => panic!("workspaces were not in sync"),
     };
     // Only obs-related staleness may be reported (it descends from feat@,
     // whose involved snapshot rebased it after obs was captured).

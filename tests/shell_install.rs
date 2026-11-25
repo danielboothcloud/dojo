@@ -1,10 +1,10 @@
-//! Integration tests for `ji::shell` install / uninstall / status.
+//! Integration tests for `dojo::shell` install / uninstall / status.
 
 use std::fs;
 use std::os::unix::fs::PermissionsExt;
 use std::path::Path;
 
-use ji::shell::{
+use dojo::shell::{
     FishProbeSource, InstallOpts, ShellEnv, UninstallOpts, install, install_all, status, uninstall,
 };
 use tempfile::TempDir;
@@ -45,7 +45,7 @@ fn uninstall_zsh(env: &ShellEnv, opts: UninstallOpts) -> anyhow::Result<()> {
 
 fn declined_marker_path(env: &ShellEnv, shell: &str) -> std::path::PathBuf {
     env.xdg_config_home
-        .join("ji")
+        .join("dojo")
         .join(format!("install-prompt-declined-{shell}"))
 }
 
@@ -56,11 +56,11 @@ fn install_then_install_is_idempotent() {
 
     install_zsh(&env, InstallOpts::default()).unwrap();
     let rc1 = read(&env.home.join(".zshrc"));
-    let mgr1 = read(&env.xdg_config_home.join("ji/init.zsh"));
+    let mgr1 = read(&env.xdg_config_home.join("dojo/init.zsh"));
 
     install_zsh(&env, InstallOpts::default()).unwrap();
     let rc2 = read(&env.home.join(".zshrc"));
-    let mgr2 = read(&env.xdg_config_home.join("ji/init.zsh"));
+    let mgr2 = read(&env.xdg_config_home.join("dojo/init.zsh"));
 
     assert_eq!(rc1, rc2);
     assert_eq!(mgr1, mgr2);
@@ -72,9 +72,9 @@ fn install_writes_marker_block() {
     let env = env_for(&tmp);
     install_zsh(&env, InstallOpts::default()).unwrap();
     let rc = read(&env.home.join(".zshrc"));
-    assert!(rc.contains("# >>> ji shell integration >>>"));
-    assert!(rc.contains("# <<< ji shell integration <<<"));
-    assert!(rc.contains("# ji-managed: do not edit"));
+    assert!(rc.contains("# >>> dojo shell integration >>>"));
+    assert!(rc.contains("# <<< dojo shell integration <<<"));
+    assert!(rc.contains("# dojo-managed: do not edit"));
 }
 
 #[test]
@@ -82,11 +82,11 @@ fn install_with_drifted_managed_file_is_updated() {
     let tmp = TempDir::new().unwrap();
     let env = env_for(&tmp);
     install_zsh(&env, InstallOpts::default()).unwrap();
-    let mgr_path = env.xdg_config_home.join("ji/init.zsh");
+    let mgr_path = env.xdg_config_home.join("dojo/init.zsh");
     write(&mgr_path, "DRIFT\n");
     install_zsh(&env, InstallOpts::default()).unwrap();
     let mgr = read(&mgr_path);
-    assert!(mgr.contains("# ji-managed: do not edit"));
+    assert!(mgr.contains("# dojo-managed: do not edit"));
     assert!(!mgr.starts_with("DRIFT"));
 }
 
@@ -97,11 +97,11 @@ fn install_with_drifted_rc_stanza_is_updated() {
     install_zsh(&env, InstallOpts::default()).unwrap();
     let rc = env.home.join(".zshrc");
     let mut contents = read(&rc);
-    contents = contents.replace("ji-managed: do not edit", "ji-managed: tampered");
+    contents = contents.replace("dojo-managed: do not edit", "dojo-managed: tampered");
     write(&rc, &contents);
     install_zsh(&env, InstallOpts::default()).unwrap();
     let after = read(&rc);
-    assert!(after.contains("ji-managed: do not edit"));
+    assert!(after.contains("dojo-managed: do not edit"));
     assert!(!after.contains("tampered"));
 }
 
@@ -112,7 +112,7 @@ fn sourced_file_bare_legacy_refused_without_force() {
     let zshrc = env.home.join(".zshrc");
     let custom = env.home.join(".zshrc.custom.zsh");
     write(&zshrc, "source \"$HOME/.zshrc.custom.zsh\"\n");
-    write(&custom, "eval \"$(command ji config shell init zsh)\"\n");
+    write(&custom, "eval \"$(command dojo config shell init zsh)\"\n");
 
     let err = install_zsh(&env, InstallOpts::default()).unwrap_err();
     let msg = format!("{err}");
@@ -127,7 +127,7 @@ fn sourced_file_force_installs_alongside() {
     let zshrc = env.home.join(".zshrc");
     let custom = env.home.join(".zshrc.custom.zsh");
     write(&zshrc, "source \"$HOME/.zshrc.custom.zsh\"\n");
-    write(&custom, "eval \"$(command ji config shell init zsh)\"\n");
+    write(&custom, "eval \"$(command dojo config shell init zsh)\"\n");
 
     install_zsh(
         &env,
@@ -139,9 +139,9 @@ fn sourced_file_force_installs_alongside() {
     .unwrap();
 
     let rc_after = read(&zshrc);
-    assert!(rc_after.contains("# >>> ji shell integration >>>"));
+    assert!(rc_after.contains("# >>> dojo shell integration >>>"));
     let custom_after = read(&custom);
-    assert!(custom_after.contains("ji config shell init"));
+    assert!(custom_after.contains("dojo config shell init"));
 }
 
 #[test]
@@ -154,7 +154,7 @@ fn sourced_file_guarded_with_test_bracket() {
         &zshrc,
         "[ -f \"$HOME/.zshrc.custom.zsh\" ] && source \"$HOME/.zshrc.custom.zsh\"\n",
     );
-    write(&custom, "eval \"$(ji config shell init zsh)\"\n");
+    write(&custom, "eval \"$(dojo config shell init zsh)\"\n");
 
     let err = install_zsh(&env, InstallOpts::default()).unwrap_err();
     assert!(format!("{err}").contains(".zshrc.custom.zsh"));
@@ -170,7 +170,7 @@ fn sourced_file_if_then_fi() {
         &zshrc,
         "if [ -f \"$HOME/.zshrc.custom.zsh\" ]; then source \"$HOME/.zshrc.custom.zsh\"; fi\n",
     );
-    write(&custom, "eval \"$(ji config shell init)\"\n");
+    write(&custom, "eval \"$(dojo config shell init)\"\n");
 
     let err = install_zsh(&env, InstallOpts::default()).unwrap_err();
     assert!(format!("{err}").contains(".zshrc.custom.zsh"));
@@ -183,7 +183,7 @@ fn sourced_file_trailing_semicolon() {
     let zshrc = env.home.join(".zshrc");
     let custom = env.home.join(".my.zsh");
     write(&zshrc, "source \"$HOME/.my.zsh\";\n");
-    write(&custom, "eval \"$(ji config shell init zsh)\"\n");
+    write(&custom, "eval \"$(dojo config shell init zsh)\"\n");
 
     let err = install_zsh(&env, InstallOpts::default()).unwrap_err();
     assert!(format!("{err}").contains(".my.zsh"));
@@ -201,7 +201,7 @@ fn sourced_file_glob_loop() {
         &zshrc,
         "for f in ~/.zshrc.d/*.zsh; do source \"$f\"; done\n",
     );
-    write(&custom, "eval \"$(ji config shell init zsh)\"\n");
+    write(&custom, "eval \"$(dojo config shell init zsh)\"\n");
 
     let err = install_zsh(&env, InstallOpts::default()).unwrap_err();
     assert!(format!("{err}").contains("aliases.zsh"));
@@ -217,7 +217,7 @@ fn sourced_file_zdotdir_resolves() {
     let zshrc = zdotdir.join(".zshrc");
     let custom = zdotdir.join("extras.zsh");
     write(&zshrc, "source \"$ZDOTDIR/extras.zsh\"\n");
-    write(&custom, "eval \"$(ji config shell init zsh)\"\n");
+    write(&custom, "eval \"$(dojo config shell init zsh)\"\n");
 
     let err = install_zsh(&env, InstallOpts::default()).unwrap_err();
     assert!(format!("{err}").contains("extras.zsh"));
@@ -231,7 +231,7 @@ fn sourced_file_unresolved_does_not_block_install() {
     write(&zshrc, "source \"$MY_PRIVATE_VAR/foo\"\n");
     install_zsh(&env, InstallOpts::default()).unwrap();
     let after = read(&zshrc);
-    assert!(after.contains("# >>> ji shell integration >>>"));
+    assert!(after.contains("# >>> dojo shell integration >>>"));
 }
 
 #[test]
@@ -239,10 +239,10 @@ fn alias_definition_is_not_a_hit() {
     let tmp = TempDir::new().unwrap();
     let env = env_for(&tmp);
     let zshrc = env.home.join(".zshrc");
-    write(&zshrc, "alias jcsi='ji config shell init zsh'\n");
+    write(&zshrc, "alias jcsi='dojo config shell init zsh'\n");
     install_zsh(&env, InstallOpts::default()).unwrap();
     let after = read(&zshrc);
-    assert!(after.contains("# >>> ji shell integration >>>"));
+    assert!(after.contains("# >>> dojo shell integration >>>"));
     assert!(after.contains("alias jcsi="));
 }
 
@@ -251,10 +251,10 @@ fn comment_line_with_ji_init_is_not_a_hit() {
     let tmp = TempDir::new().unwrap();
     let env = env_for(&tmp);
     let zshrc = env.home.join(".zshrc");
-    write(&zshrc, "# eval \"$(ji config shell init zsh)\"\n");
+    write(&zshrc, "# eval \"$(dojo config shell init zsh)\"\n");
     install_zsh(&env, InstallOpts::default()).unwrap();
     let after = read(&zshrc);
-    assert!(after.contains("# >>> ji shell integration >>>"));
+    assert!(after.contains("# >>> dojo shell integration >>>"));
 }
 
 #[test]
@@ -262,7 +262,7 @@ fn legacy_primary_rc_refused_without_force() {
     let tmp = TempDir::new().unwrap();
     let env = env_for(&tmp);
     let zshrc = env.home.join(".zshrc");
-    write(&zshrc, "eval \"$(command ji config shell init zsh)\"\n");
+    write(&zshrc, "eval \"$(command dojo config shell init zsh)\"\n");
     let err = install_zsh(&env, InstallOpts::default()).unwrap_err();
     let msg = format!("{err}");
     assert!(msg.contains("existing integration line"));
@@ -275,7 +275,7 @@ fn malformed_marker_refused_without_force() {
     let zshrc = env.home.join(".zshrc");
     write(
         &zshrc,
-        "# >>> ji shell integration >>>\nsome content\n# (no end marker)\n",
+        "# >>> dojo shell integration >>>\nsome content\n# (no end marker)\n",
     );
     let err = install_zsh(&env, InstallOpts::default()).unwrap_err();
     assert!(format!("{err}").contains("malformed"));
@@ -286,7 +286,7 @@ fn malformed_marker_overwritten_with_force() {
     let tmp = TempDir::new().unwrap();
     let env = env_for(&tmp);
     let zshrc = env.home.join(".zshrc");
-    write(&zshrc, "# >>> ji shell integration >>>\nstale\n");
+    write(&zshrc, "# >>> dojo shell integration >>>\nstale\n");
     install_zsh(
         &env,
         InstallOpts {
@@ -296,7 +296,7 @@ fn malformed_marker_overwritten_with_force() {
     )
     .unwrap();
     let after = read(&zshrc);
-    assert!(after.contains("# <<< ji shell integration <<<"));
+    assert!(after.contains("# <<< dojo shell integration <<<"));
 }
 
 #[test]
@@ -312,7 +312,7 @@ fn dry_run_makes_no_filesystem_changes() {
     )
     .unwrap();
     assert!(!env.home.join(".zshrc").exists());
-    assert!(!env.xdg_config_home.join("ji/init.zsh").exists());
+    assert!(!env.xdg_config_home.join("dojo/init.zsh").exists());
 }
 
 #[test]
@@ -324,9 +324,9 @@ fn install_all_configures_present_skips_absent() {
     install_all(&env, InstallOpts::default()).unwrap();
 
     let rc = read(&env.home.join(".zshrc"));
-    assert!(rc.contains("# >>> ji shell integration >>>"));
-    assert!(rc.contains("# <<< ji shell integration <<<"));
-    assert!(env.xdg_config_home.join("ji/init.zsh").exists());
+    assert!(rc.contains("# >>> dojo shell integration >>>"));
+    assert!(rc.contains("# <<< dojo shell integration <<<"));
+    assert!(env.xdg_config_home.join("dojo/init.zsh").exists());
     assert!(!env.home.join(".bash_profile").exists());
 }
 
@@ -338,11 +338,11 @@ fn install_all_all_unchanged_is_idempotent_noop() {
 
     install_all(&env, InstallOpts::default()).unwrap();
     let rc1 = fs::read(env.home.join(".zshrc")).unwrap();
-    let mgr1 = fs::read(env.xdg_config_home.join("ji/init.zsh")).unwrap();
+    let mgr1 = fs::read(env.xdg_config_home.join("dojo/init.zsh")).unwrap();
 
     install_all(&env, InstallOpts::default()).unwrap();
     let rc2 = fs::read(env.home.join(".zshrc")).unwrap();
-    let mgr2 = fs::read(env.xdg_config_home.join("ji/init.zsh")).unwrap();
+    let mgr2 = fs::read(env.xdg_config_home.join("dojo/init.zsh")).unwrap();
 
     assert_eq!(rc1, rc2);
     assert_eq!(mgr1, mgr2);
@@ -356,7 +356,7 @@ fn install_all_no_present_shells_creates_nothing() {
     install_all(&env, InstallOpts::default()).unwrap();
 
     assert_eq!(fs::read_dir(&env.home).unwrap().count(), 0);
-    assert!(!env.xdg_config_home.join("ji/init.zsh").exists());
+    assert!(!env.xdg_config_home.join("dojo/init.zsh").exists());
     assert!(!env.home.join(".bash_profile").exists());
     assert!(!env.home.join(".zshrc").exists());
 }
@@ -371,7 +371,7 @@ fn install_all_bashrc_only_skips_bash() {
     install_all(&env, InstallOpts::default()).unwrap();
 
     assert!(!env.home.join(".bash_profile").exists());
-    assert!(!env.xdg_config_home.join("ji/init.bash").exists());
+    assert!(!env.xdg_config_home.join("dojo/init.bash").exists());
     assert_eq!(read(&bashrc), "");
 }
 
@@ -391,7 +391,7 @@ fn install_all_dry_run_writes_nothing() {
     .unwrap();
 
     assert_eq!(read(&env.home.join(".zshrc")), "");
-    assert!(!env.xdg_config_home.join("ji/init.zsh").exists());
+    assert!(!env.xdg_config_home.join("dojo/init.zsh").exists());
 }
 
 #[test]
@@ -400,12 +400,12 @@ fn uninstall_removes_managed_block_and_managed_file() {
     let env = env_for(&tmp);
     install_zsh(&env, InstallOpts::default()).unwrap();
     assert!(env.home.join(".zshrc").exists());
-    assert!(env.xdg_config_home.join("ji/init.zsh").exists());
+    assert!(env.xdg_config_home.join("dojo/init.zsh").exists());
 
     uninstall_zsh(&env, UninstallOpts::default()).unwrap();
     let rc = read(&env.home.join(".zshrc"));
-    assert!(!rc.contains("# >>> ji shell integration >>>"));
-    assert!(!env.xdg_config_home.join("ji/init.zsh").exists());
+    assert!(!rc.contains("# >>> dojo shell integration >>>"));
+    assert!(!env.xdg_config_home.join("dojo/init.zsh").exists());
 }
 
 #[test]
@@ -483,7 +483,7 @@ fn bash_login_precedence_picks_bash_login_when_present() {
     let env = env_for(&tmp);
     write(&env.home.join(".bash_login"), "");
     install(&env, "bash", InstallOpts::default()).unwrap();
-    assert!(read(&env.home.join(".bash_login")).contains("# >>> ji shell integration >>>"));
+    assert!(read(&env.home.join(".bash_login")).contains("# >>> dojo shell integration >>>"));
     assert!(!env.home.join(".bash_profile").exists());
 }
 
@@ -494,7 +494,7 @@ fn bash_all_absent_creates_bash_profile() {
     install(&env, "bash", InstallOpts::default()).unwrap();
     let bp = env.home.join(".bash_profile");
     assert!(bp.exists());
-    assert!(read(&bp).contains("# >>> ji shell integration >>>"));
+    assert!(read(&bp).contains("# >>> dojo shell integration >>>"));
     assert!(!env.home.join(".bash_login").exists());
 }
 
@@ -534,7 +534,7 @@ fn symlinked_rc_preserves_symlink() {
     install_zsh(&env, InstallOpts::default()).unwrap();
     let md = fs::symlink_metadata(&link).unwrap();
     assert!(md.file_type().is_symlink());
-    assert!(read(&real).contains("# >>> ji shell integration >>>"));
+    assert!(read(&real).contains("# >>> dojo shell integration >>>"));
 }
 
 #[test]
@@ -564,7 +564,7 @@ fn omz_custom_dir_legacy_detected() {
     env.zsh_custom = Some(custom.clone());
     write(
         &custom.join("aliases.zsh"),
-        "eval \"$(ji config shell init zsh)\"\n",
+        "eval \"$(dojo config shell init zsh)\"\n",
     );
 
     let err = install_zsh(&env, InstallOpts::default()).unwrap_err();
@@ -583,7 +583,7 @@ fn status_does_not_panic() {
 fn status_with_bypass_alias_does_not_panic() {
     let tmp = TempDir::new().unwrap();
     let env = env_for(&tmp);
-    write(&env.home.join(".zshrc"), "alias ji=/opt/bin/ji\n");
+    write(&env.home.join(".zshrc"), "alias dojo=/opt/bin/dojo\n");
 
     install_zsh(&env, InstallOpts::default()).unwrap();
 
@@ -596,7 +596,7 @@ fn benign_alias_still_installs() {
     let env = env_for(&tmp);
     write(
         &env.home.join(".zshrc"),
-        "alias jcsi='ji config shell init zsh'\n",
+        "alias jcsi='dojo config shell init zsh'\n",
     );
 
     install_zsh(&env, InstallOpts::default()).unwrap();
@@ -607,33 +607,33 @@ fn fish_install_writes_functions_wrapper_and_completions() {
     let tmp = TempDir::new().unwrap();
     let env = env_for(&tmp);
     install(&env, "fish", InstallOpts::default()).unwrap();
-    assert!(env.xdg_config_home.join("fish/functions/ji.fish").exists());
+    assert!(env.xdg_config_home.join("fish/functions/dojo.fish").exists());
     assert!(
         env.xdg_config_home
-            .join("fish/completions/ji.fish")
+            .join("fish/completions/dojo.fish")
             .exists()
     );
-    let wrapper = read(&env.xdg_config_home.join("fish/functions/ji.fish"));
-    assert!(wrapper.contains("# ji-managed: do not edit"));
-    assert!(wrapper.contains("function ji"));
+    let wrapper = read(&env.xdg_config_home.join("fish/functions/dojo.fish"));
+    assert!(wrapper.contains("# dojo-managed: do not edit"));
+    assert!(wrapper.contains("function dojo"));
 }
 
 #[test]
 fn fish_user_authored_completions_refused_without_force() {
     let tmp = TempDir::new().unwrap();
     let env = env_for(&tmp);
-    let comp = env.xdg_config_home.join("fish/completions/ji.fish");
-    write(&comp, "# user authored, NOT ji-managed\n");
+    let comp = env.xdg_config_home.join("fish/completions/dojo.fish");
+    write(&comp, "# user authored, NOT dojo-managed\n");
     let err = install(&env, "fish", InstallOpts::default()).unwrap_err();
-    assert!(format!("{err}").contains("not ji-managed"));
+    assert!(format!("{err}").contains("not dojo-managed"));
 }
 
 #[test]
 fn fish_user_authored_completions_overwritten_with_force() {
     let tmp = TempDir::new().unwrap();
     let env = env_for(&tmp);
-    let comp = env.xdg_config_home.join("fish/completions/ji.fish");
-    write(&comp, "# user authored, NOT ji-managed\n");
+    let comp = env.xdg_config_home.join("fish/completions/dojo.fish");
+    write(&comp, "# user authored, NOT dojo-managed\n");
     install(
         &env,
         "fish",
@@ -643,12 +643,12 @@ fn fish_user_authored_completions_overwritten_with_force() {
         },
     )
     .unwrap();
-    assert!(read(&comp).contains("# ji-managed: do not edit"));
+    assert!(read(&comp).contains("# dojo-managed: do not edit"));
 }
 
-/// ji's dynamic vendor completion (what Homebrew ships).
+/// dojo's dynamic vendor completion (what Homebrew ships).
 fn dynamic_vendor_body() -> String {
-    ji::shell::packaged_completion("fish").unwrap()
+    dojo::shell::packaged_completion("fish").unwrap()
 }
 
 /// Env whose `$fish_complete_path` is the temp user dir followed by `vendor`.
@@ -663,20 +663,20 @@ fn env_with_vendor(tmp: &TempDir, vendor: &Path) -> ShellEnv {
 fn fish_install_vendor_present_removes_stale_user_completion() {
     let tmp = TempDir::new().unwrap();
     let vendor = tmp.path().join("vendor");
-    write(&vendor.join("ji.fish"), &dynamic_vendor_body());
+    write(&vendor.join("dojo.fish"), &dynamic_vendor_body());
     let env = env_with_vendor(&tmp, &vendor);
-    let comp = env.xdg_config_home.join("fish/completions/ji.fish");
-    // A stale, ji-managed static user completion that shadows the vendor one.
+    let comp = env.xdg_config_home.join("fish/completions/dojo.fish");
+    // A stale, dojo-managed static user completion that shadows the vendor one.
     write(
         &comp,
-        "# ji-managed: do not edit\ncomplete -c ji -a switch\n",
+        "# dojo-managed: do not edit\ncomplete -c dojo -a switch\n",
     );
     install(&env, "fish", InstallOpts::default()).unwrap();
     assert!(
         !comp.exists(),
         "stale shadowing user completion should be removed"
     );
-    assert!(env.xdg_config_home.join("fish/functions/ji.fish").exists());
+    assert!(env.xdg_config_home.join("fish/functions/dojo.fish").exists());
 }
 
 #[test]
@@ -684,7 +684,7 @@ fn fish_install_no_vendor_writes_user_completion() {
     let tmp = TempDir::new().unwrap();
     let env = env_for(&tmp); // default: no vendor on the path
     install(&env, "fish", InstallOpts::default()).unwrap();
-    let comp = env.xdg_config_home.join("fish/completions/ji.fish");
+    let comp = env.xdg_config_home.join("fish/completions/dojo.fish");
     assert!(comp.exists());
     assert!(
         read(&comp).contains("COMPLETE=fish"),
@@ -696,12 +696,12 @@ fn fish_install_no_vendor_writes_user_completion() {
 fn fish_install_vendor_present_is_idempotent() {
     let tmp = TempDir::new().unwrap();
     let vendor = tmp.path().join("vendor");
-    write(&vendor.join("ji.fish"), &dynamic_vendor_body());
+    write(&vendor.join("dojo.fish"), &dynamic_vendor_body());
     let env = env_with_vendor(&tmp, &vendor);
-    let comp = env.xdg_config_home.join("fish/completions/ji.fish");
+    let comp = env.xdg_config_home.join("fish/completions/dojo.fish");
     write(
         &comp,
-        "# ji-managed: do not edit\ncomplete -c ji -a switch\n",
+        "# dojo-managed: do not edit\ncomplete -c dojo -a switch\n",
     );
     install(&env, "fish", InstallOpts::default()).unwrap();
     assert!(!comp.exists());
@@ -714,12 +714,12 @@ fn fish_install_vendor_present_is_idempotent() {
 fn fish_install_dry_run_does_not_delete() {
     let tmp = TempDir::new().unwrap();
     let vendor = tmp.path().join("vendor");
-    write(&vendor.join("ji.fish"), &dynamic_vendor_body());
+    write(&vendor.join("dojo.fish"), &dynamic_vendor_body());
     let env = env_with_vendor(&tmp, &vendor);
-    let comp = env.xdg_config_home.join("fish/completions/ji.fish");
+    let comp = env.xdg_config_home.join("fish/completions/dojo.fish");
     write(
         &comp,
-        "# ji-managed: do not edit\ncomplete -c ji -a switch\n",
+        "# dojo-managed: do not edit\ncomplete -c dojo -a switch\n",
     );
     install(
         &env,
@@ -737,8 +737,8 @@ fn fish_install_dry_run_does_not_delete() {
 fn fish_shadow_file_in_conf_d_refused() {
     let tmp = TempDir::new().unwrap();
     let env = env_for(&tmp);
-    let shadow = env.xdg_config_home.join("fish/conf.d/ji.fish");
-    write(&shadow, "function ji; echo other; end\n");
+    let shadow = env.xdg_config_home.join("fish/conf.d/dojo.fish");
+    write(&shadow, "function dojo; echo other; end\n");
     let err = install(&env, "fish", InstallOpts::default()).unwrap_err();
     assert!(format!("{err}").contains("shadow"));
 }
@@ -747,18 +747,18 @@ fn fish_shadow_file_in_conf_d_refused() {
 fn fish_user_authored_functions_ji_refused_without_force() {
     let tmp = TempDir::new().unwrap();
     let env = env_for(&tmp);
-    let p = env.xdg_config_home.join("fish/functions/ji.fish");
-    write(&p, "function ji; echo custom; end\n");
+    let p = env.xdg_config_home.join("fish/functions/dojo.fish");
+    write(&p, "function dojo; echo custom; end\n");
     let err = install(&env, "fish", InstallOpts::default()).unwrap_err();
-    assert!(format!("{err}").contains("not ji-managed"));
+    assert!(format!("{err}").contains("not dojo-managed"));
 }
 
 #[test]
 fn fish_shadow_file_overridden_with_force_then_cleaned_by_uninstall() {
     let tmp = TempDir::new().unwrap();
     let env = env_for(&tmp);
-    let shadow = env.xdg_config_home.join("fish/conf.d/ji.fish");
-    write(&shadow, "# ji-managed: do not edit\nfunction ji; end\n");
+    let shadow = env.xdg_config_home.join("fish/conf.d/dojo.fish");
+    write(&shadow, "# dojo-managed: do not edit\nfunction dojo; end\n");
     install(
         &env,
         "fish",
@@ -781,13 +781,13 @@ fn concurrent_install_byte_equal_result() {
     let env = env_for(&tmp);
     install_zsh(&env, InstallOpts::default()).unwrap();
     let r1 = read(&env.home.join(".zshrc"));
-    let m1 = read(&env.xdg_config_home.join("ji/init.zsh"));
+    let m1 = read(&env.xdg_config_home.join("dojo/init.zsh"));
 
     let tmp2 = TempDir::new().unwrap();
     let env2 = env_for(&tmp2);
     install_zsh(&env2, InstallOpts::default()).unwrap();
     let r2 = read(&env2.home.join(".zshrc"));
-    let m2 = read(&env2.xdg_config_home.join("ji/init.zsh"));
+    let m2 = read(&env2.xdg_config_home.join("dojo/init.zsh"));
 
     assert_eq!(r1, r2);
     assert_eq!(m1, m2);
@@ -802,10 +802,10 @@ fn install_does_not_recurse_into_sourced_files_beyond_one_hop() {
     let b = env.home.join(".b.zsh");
     write(&zshrc, "source \"$HOME/.a.zsh\"\n");
     write(&a, "source \"$HOME/.b.zsh\"\n");
-    write(&b, "eval \"$(ji config shell init zsh)\"\n");
+    write(&b, "eval \"$(dojo config shell init zsh)\"\n");
 
     install_zsh(&env, InstallOpts::default()).unwrap();
-    assert!(read(&zshrc).contains("# >>> ji shell integration >>>"));
+    assert!(read(&zshrc).contains("# >>> dojo shell integration >>>"));
 }
 
 #[test]
@@ -819,7 +819,7 @@ fn marker_block_after_comment_lines_is_detected_on_reinstall() {
     write(&zshrc, &prepended);
     install_zsh(&env, InstallOpts::default()).unwrap();
     let after = read(&zshrc);
-    let count = after.matches("# >>> ji shell integration >>>").count();
+    let count = after.matches("# >>> dojo shell integration >>>").count();
     assert_eq!(count, 1, "marker block duplicated:\n{after}");
 }
 

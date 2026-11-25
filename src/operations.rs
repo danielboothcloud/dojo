@@ -63,7 +63,7 @@ fn squash_chain(
     let total = full_descs.len();
     for (i, (change_id, desc)) in full_descs.iter().rev().enumerate() {
         squash_msg.push_str(&format!(
-            "\n\n### (ji::squash) revision {} of {} ({}) ###\n\n{}",
+            "\n\n### (dojo::squash) revision {} of {} ({}) ###\n\n{}",
             i + 1,
             total,
             change_id,

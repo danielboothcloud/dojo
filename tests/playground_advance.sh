@@ -2,14 +2,14 @@
 # Tests source-workspace auto-advance when creating workspaces.
 #
 # Under the current model (src/operations.rs::create_workspace) the source
-# workspace steps forward — a new "(ji::step-forward)" revision becomes @ —
+# workspace steps forward — a new "(dojo::step-forward)" revision becomes @ —
 # only when the new workspace branches from a non-trivial head. Branching from
 # a trivial head (empty WIP with a trivial description) or from an interior
 # (non-head) revision does not step the source.
 #
 # Usage: task playground:advance
 set -euo pipefail
-export JI_LOG=1
+export DOJO_LOG=1
 
 DIR="$(mktemp -d)"
 DIRECTIVE="$(mktemp)"
@@ -29,7 +29,7 @@ jj describe -m "initial commit"
 jj new -m "default wip"
 jj bookmark create main -r @-
 
-JI_DIRECTIVE_FILE="$DIRECTIVE" command ji init
+DOJO_DIRECTIVE_FILE="$DIRECTIVE" command dojo init
 
 # ===================================================================
 # Test 1: branching from a non-trivial @ steps the source forward
@@ -38,24 +38,24 @@ echo ""
 echo "=== Test 1: advance from a non-trivial head ==="
 
 # Give @ real work so it is unambiguously a non-trivial head. The `jj log`
-# below snapshots this edit into @ before `ji new` runs — load-bearing,
+# below snapshots this edit into @ before `dojo new` runs — load-bearing,
 # because the create path classifies @ with `--ignore-working-copy` and would
 # otherwise still see an empty head and not step.
 echo "alpha work" > alpha.txt
 BEFORE=$(jj log --no-graph -r '@' -T 'change_id')
 echo "  @ before: $BEFORE"
 
-JI_DIRECTIVE_FILE="$DIRECTIVE" command ji new feature/alpha --revision "$BEFORE" -m "alpha start" 2>&1
+DOJO_DIRECTIVE_FILE="$DIRECTIVE" command dojo new feature/alpha --revision "$BEFORE" -m "alpha start" 2>&1
 
 AFTER=$(jj log --no-graph -r '@' -T 'change_id')
 echo "  @ after:  $AFTER"
 
 if [ "$BEFORE" != "$AFTER" ]; then
     DESC=$(jj log --no-graph -r '@' -T 'description.first_line()')
-    if [ "$DESC" = "(ji::step-forward)" ]; then
-        echo "  PASS: source @ advanced with '(ji::step-forward)' description"
+    if [ "$DESC" = "(dojo::step-forward)" ]; then
+        echo "  PASS: source @ advanced with '(dojo::step-forward)' description"
     else
-        echo "  FAIL: source @ advanced but description is '$DESC', expected '(ji::step-forward)'"
+        echo "  FAIL: source @ advanced but description is '$DESC', expected '(dojo::step-forward)'"
         exit 1
     fi
 else
@@ -87,7 +87,7 @@ jj new
 BEFORE=$(jj log --no-graph -r '@' -T 'change_id')
 echo "  @ before: $BEFORE"
 
-JI_DIRECTIVE_FILE="$DIRECTIVE" command ji new feature/beta --revision "$BEFORE" -m "beta start" 2>&1
+DOJO_DIRECTIVE_FILE="$DIRECTIVE" command dojo new feature/beta --revision "$BEFORE" -m "beta start" 2>&1
 
 AFTER=$(jj log --no-graph -r '@' -T 'change_id')
 echo "  @ after:  $AFTER"
@@ -121,7 +121,7 @@ echo "=== Test 3: branch from bookmark (no advance) ==="
 BEFORE=$(jj log --no-graph -r '@' -T 'change_id')
 echo "  @ before: $BEFORE"
 
-JI_DIRECTIVE_FILE="$DIRECTIVE" command ji new feature/gamma --revision main -m "gamma start" 2>&1
+DOJO_DIRECTIVE_FILE="$DIRECTIVE" command dojo new feature/gamma --revision main -m "gamma start" 2>&1
 
 AFTER=$(jj log --no-graph -r '@' -T 'change_id')
 echo "  @ after:  $AFTER"

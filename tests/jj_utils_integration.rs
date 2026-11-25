@@ -1,13 +1,13 @@
 //! Integration tests for jj_utils functions.
 //!
-//! These tests call ji's Rust functions against real jj repos in temp
+//! These tests call dojo's Rust functions against real jj repos in temp
 //! directories. They require `jj` and `git` to be installed.
 
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use tempfile::TempDir;
 
-use ji::jj_utils;
+use dojo::jj_utils;
 
 // ---------------------------------------------------------------------------
 // Test harness
@@ -209,11 +209,11 @@ fn is_trivial_head_false_for_interior() {
 fn is_trivial_head_ji_marker() {
     let repo = TestRepo::new();
     repo.commit_file("a.txt", "a", "initial");
-    repo.jj_new("(ji::step-forward)");
+    repo.jj_new("(dojo::step-forward)");
 
     assert!(
         jj_utils::is_trivial_head(repo.root(), "@").unwrap(),
-        "empty revision with ji:: marker should be trivial"
+        "empty revision with dojo:: marker should be trivial"
     );
 }
 
@@ -363,19 +363,19 @@ fn step_head_noop_when_already_trivial() {
 #[test]
 fn make_desc_without_detail() {
     let desc = jj_utils::make_desc(jj_utils::Op::Step, None);
-    assert_eq!(desc, "(ji::step-forward)");
+    assert_eq!(desc, "(dojo::step-forward)");
 }
 
 #[test]
 fn make_desc_with_detail() {
     let desc = jj_utils::make_desc(jj_utils::Op::FastForward, Some("default@ to feature@abc"));
-    assert_eq!(desc, "(ji::fast-forward) default@ to feature@abc");
+    assert_eq!(desc, "(dojo::fast-forward) default@ to feature@abc");
 }
 
 #[test]
 fn make_desc_merge() {
     let desc = jj_utils::make_desc(jj_utils::Op::Merge, Some("a into b"));
-    assert_eq!(desc, "(ji::merge) a into b");
+    assert_eq!(desc, "(dojo::merge) a into b");
 }
 
 #[test]

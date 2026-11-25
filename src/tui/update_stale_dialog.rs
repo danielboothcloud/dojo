@@ -147,28 +147,28 @@ impl UpdateStaleDiffDialog {
     }
 }
 
-/// Save one file's diff to `.ji/diffs/`, callable from the
+/// Save one file's diff to `.dojo/diffs/`, callable from the
 /// `PendingHandoff::SaveDiff` arm without a borrow of the dialog.
 pub(crate) fn save_diff_inline(
     ws_path: &Path,
     kind: DiffKind,
     rel_path: &str,
 ) -> Result<Option<String>> {
-    crate::jj_utils::ensure_ji_dir(ws_path)?;
-    let diffs_dir = ws_path.join(".ji").join("diffs");
+    crate::jj_utils::ensure_dojo_dir(ws_path)?;
+    let diffs_dir = ws_path.join(".dojo").join("diffs");
     write_one_diff_inline(&diffs_dir, ws_path, kind, rel_path)?;
     let out_path = diffs_dir.join(rel_path);
     Ok(Some(out_path.display().to_string()))
 }
 
-/// Save all changed files' diffs to `.ji/diffs/`, for the
+/// Save all changed files' diffs to `.dojo/diffs/`, for the
 /// `PendingHandoff::SaveAllDiffs` arm.
 pub(crate) fn save_all_diffs_inline(ws_path: &Path, items: &[(DiffKind, String)]) -> Result<usize> {
     if items.is_empty() {
         return Ok(0);
     }
-    crate::jj_utils::ensure_ji_dir(ws_path)?;
-    let diffs_dir = ws_path.join(".ji").join("diffs");
+    crate::jj_utils::ensure_dojo_dir(ws_path)?;
+    let diffs_dir = ws_path.join(".dojo").join("diffs");
     for (kind, rel_path) in items {
         write_one_diff_inline(&diffs_dir, ws_path, *kind, rel_path)?;
     }
@@ -208,7 +208,7 @@ fn write_one_diff_inline(
     Ok(())
 }
 
-/// Compute the stale diff and save diffs for all changed files to `.ji/diffs/`.
+/// Compute the stale diff and save diffs for all changed files to `.dojo/diffs/`.
 /// Returns the number of diff files written.
 pub(crate) fn save_all_stale_diffs(ws_path: &Path) -> Result<usize> {
     let diff = jujutsu::stale_workspace_diff(ws_path)?;
@@ -218,8 +218,8 @@ pub(crate) fn save_all_stale_diffs(ws_path: &Path) -> Result<usize> {
         return Ok(0);
     }
 
-    crate::jj_utils::ensure_ji_dir(ws_path)?;
-    let diffs_dir = ws_path.join(".ji").join("diffs");
+    crate::jj_utils::ensure_dojo_dir(ws_path)?;
+    let diffs_dir = ws_path.join(".dojo").join("diffs");
     let mut saved = 0usize;
 
     for rel_path in &diff.modified {

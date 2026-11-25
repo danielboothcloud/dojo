@@ -5,7 +5,7 @@ use std::path::Path;
 
 use crate::hooks::{self, TemplateWarning};
 
-const CONFIG_TEMPLATE: &str = include_str!("ji.template.toml");
+const CONFIG_TEMPLATE: &str = include_str!("dojo.template.toml");
 
 #[derive(Debug, Clone, Deserialize)]
 pub struct Config {
@@ -24,9 +24,9 @@ pub struct Config {
     /// Custom jj template for the displayed graph pane (passed to `jj log --template`).
     #[serde(rename = "log-template", default)]
     pub log_template: Option<String>,
-    /// Override the author on every revision created by ji via `jj metaedit --author`.
-    #[serde(rename = "ji-author", default)]
-    pub ji_author: Option<String>,
+    /// Override the author on every revision created by dojo via `jj metaedit --author`.
+    #[serde(rename = "dojo-author", default)]
+    pub dojo_author: Option<String>,
     /// Restore Finder-relevant xattrs (macOS alias flag, resource fork) after
     /// operations that materialize working-copy files. Gates the xattr writes
     /// only — the fidelity warnings are always emitted.
@@ -57,7 +57,7 @@ impl Default for Config {
             post_start: BTreeMap::new(),
             templates: BTreeMap::new(),
             log_template: None,
-            ji_author: None,
+            dojo_author: None,
             preserve_finder_xattrs: default_preserve_finder_xattrs(),
             warnings: Vec::new(),
         }
@@ -80,7 +80,7 @@ pub fn resolve_repo_name(config: &Config, repo_root: &Path) -> String {
 }
 
 pub fn load_config(repo_root: &Path) -> Result<Config> {
-    let config_path = repo_root.join(".config/ji.toml");
+    let config_path = repo_root.join(".config/dojo.toml");
     if !config_path.exists() {
         return Ok(Config::default());
     }
@@ -118,7 +118,7 @@ pub fn load_config(repo_root: &Path) -> Result<Config> {
 
 pub fn create_config(repo_root: &Path) -> Result<()> {
     let config_dir = repo_root.join(".config");
-    let config_path = config_dir.join("ji.toml");
+    let config_path = config_dir.join("dojo.toml");
 
     if config_path.exists() {
         anyhow::bail!("{} already exists", config_path.display());
@@ -129,6 +129,6 @@ pub fn create_config(repo_root: &Path) -> Result<()> {
     std::fs::write(&config_path, CONFIG_TEMPLATE)
         .with_context(|| format!("failed to write {}", config_path.display()))?;
 
-    eprintln!("(ji)::config created {}", config_path.display());
+    eprintln!("(dojo)::config created {}", config_path.display());
     Ok(())
 }

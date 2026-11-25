@@ -12,7 +12,7 @@ includes:
     flatten: true
 
 vars:
-  BIN_NAME: ji
+  BIN_NAME: dojo
 
 tasks:
 
@@ -65,11 +65,11 @@ tasks:
       - cp target/man/{{.BIN_NAME}}.1 '{{.HOME}}/.local/share/man/man1/'
       # Shell integration for the active shell only — the install subcommand
       # detects the shell that invoked it (falling back to $SHELL) when no shell
-      # is named. Install another shell manually with `ji config shell install <shell>`.
+      # is named. Install another shell manually with `dojo config shell install <shell>`.
       - '{{.HOME}}/.local/bin/{{.BIN_NAME}} config shell install'
 
   gen-man:
-    desc: Generate the ji(1) man page (target/man/ji.1)
+    desc: Generate the dojo(1) man page (target/man/dojo.1)
     cmds:
       - cargo xtask gen-man
 
@@ -158,13 +158,13 @@ tasks:
   # === RUN & DEBUG ===
 
   run:
-    desc: Run ji with arguments
+    desc: Run dojo with arguments
     deps: [build]
     cmds:
       - ./target/debug/{{.BIN_NAME}} {{.CLI_ARGS}}
 
   ws:
-    desc: Launch the ji TUI workspace switcher
+    desc: Launch the dojo TUI workspace switcher
     deps: [build]
     cmds:
       - ./target/debug/{{.BIN_NAME}}
@@ -211,9 +211,9 @@ tasks:
             '' \
             'Manual completion probes (success: each lists the expected workspace names):' \
             '' \
-            "  env _CLAP_COMPLETE_INDEX=2 COMPLETE=zsh ./target/debug/ji -- ji switch ''" \
-            "  env _CLAP_COMPLETE_INDEX=2 _CLAP_COMPLETE_COMP_TYPE=9 _CLAP_COMPLETE_SPACE=false COMPLETE=bash ./target/debug/ji -- ji switch ''" \
-            "  env COMPLETE=fish ./target/debug/ji -- ji switch ''" \
+            "  env _CLAP_COMPLETE_INDEX=2 COMPLETE=zsh ./target/debug/dojo -- dojo switch ''" \
+            "  env _CLAP_COMPLETE_INDEX=2 _CLAP_COMPLETE_COMP_TYPE=9 _CLAP_COMPLETE_SPACE=false COMPLETE=bash ./target/debug/dojo -- dojo switch ''" \
+            "  env COMPLETE=fish ./target/debug/dojo -- dojo switch ''" \
             '' \
             'An empty completion list is a failure even if the probe exits 0; completion is deliberately fail-soft.'
         silent: true

@@ -1,6 +1,4 @@
 use anyhow::{Context, Result, bail};
-use libproc::bsd_info::BSDInfo;
-use libproc::proc_pid::{pidinfo, pidpath};
 use std::ops::Range;
 use std::os::unix::fs::OpenOptionsExt;
 use std::path::{Path, PathBuf};
@@ -9,21 +7,21 @@ use std::path::{Path, PathBuf};
 // Wrapper / completion content
 // =====================================================================
 
-const MARKER_BEGIN: &str = "# >>> ji shell integration >>>";
-const MARKER_END: &str = "# <<< ji shell integration <<<";
-const MANAGED_HEADER: &str = "# ji-managed: do not edit";
+const MARKER_BEGIN: &str = "# >>> dojo shell integration >>>";
+const MARKER_END: &str = "# <<< dojo shell integration <<<";
+const MANAGED_HEADER: &str = "# dojo-managed: do not edit";
 
-const ZSH_WRAPPER: &str = r#"if command -v ji >/dev/null 2>&1; then
-    ji() {
+const ZSH_WRAPPER: &str = r#"if command -v dojo >/dev/null 2>&1; then
+    dojo() {
         if [[ -n ${COMPLETE-} ]]; then
-            command ji "$@"
+            command dojo "$@"
             return
         fi
 
         local directive_file exit_code=0
         directive_file="$(mktemp)"
 
-        JI_DIRECTIVE_FILE="$directive_file" command ji "$@" || exit_code=$?
+        DOJO_DIRECTIVE_FILE="$directive_file" command dojo "$@" || exit_code=$?
 
         if [[ -s "$directive_file" ]]; then
             source "$directive_file"
@@ -39,17 +37,17 @@ const ZSH_WRAPPER: &str = r#"if command -v ji >/dev/null 2>&1; then
 fi
 "#;
 
-const BASH_WRAPPER: &str = r#"if command -v ji >/dev/null 2>&1; then
-    ji() {
+const BASH_WRAPPER: &str = r#"if command -v dojo >/dev/null 2>&1; then
+    dojo() {
         if [[ -n ${COMPLETE-} ]]; then
-            command ji "$@"
+            command dojo "$@"
             return
         fi
 
         local directive_file exit_code=0
         directive_file="$(mktemp)"
 
-        JI_DIRECTIVE_FILE="$directive_file" command ji "$@" || exit_code=$?
+        DOJO_DIRECTIVE_FILE="$directive_file" command dojo "$@" || exit_code=$?
 
         if [[ -s "$directive_file" ]]; then
             source "$directive_file"
@@ -65,15 +63,15 @@ const BASH_WRAPPER: &str = r#"if command -v ji >/dev/null 2>&1; then
 fi
 "#;
 
-const FISH_WRAPPER: &str = r#"function ji --description 'ji workspace switcher (with cd directive support)'
+const FISH_WRAPPER: &str = r#"function dojo --description 'dojo workspace switcher (with cd directive support)'
     if set -q COMPLETE
-        command ji $argv
+        command dojo $argv
         return $status
     end
 
     set -l directive_file (mktemp)
 
-    JI_DIRECTIVE_FILE=$directive_file command ji $argv
+    DOJO_DIRECTIVE_FILE=$directive_file command dojo $argv
     set -l exit_code $status
 
     if test -s $directive_file
@@ -116,13 +114,13 @@ fn raw_registration(shell: &str) -> Result<String> {
     };
     let mut buf: Vec<u8> = Vec::new();
     completer
-        .write_registration("COMPLETE", "ji", "ji", "ji", &mut buf)
+        .write_registration("COMPLETE", "dojo", "dojo", "dojo", &mut buf)
         .context("generating dynamic completion registration")?;
     String::from_utf8(buf).context("clap_complete generated invalid UTF-8")
 }
 
 /// Dynamic completion registration for the *sourced* init body. When sourced it
-/// registers a completer that invokes `ji` with the tokenized command line at
+/// registers a completer that invokes `dojo` with the tokenized command line at
 /// completion time.
 fn completion_script(shell: &str) -> Result<String> {
     let script = raw_registration(shell)?;
@@ -132,9 +130,9 @@ fn completion_script(shell: &str) -> Result<String> {
         "zsh" => Ok(format!(
             "if (( ${{+functions[compdef]}} )); then\n{script}\nfi\n"
         )),
-        // The fish wrapper has no outer `command -v ji` guard (unlike the zsh/
+        // The fish wrapper has no outer `command -v dojo` guard (unlike the zsh/
         // bash rc sourcing), so guard the fish registration itself.
-        "fish" => Ok(format!("if command -q ji\n{script}\nend\n")),
+        "fish" => Ok(format!("if command -q dojo\n{script}\nend\n")),
         _ => Ok(script),
     }
 }
@@ -143,9 +141,9 @@ fn completion_script(shell: &str) -> Result<String> {
 /// (Homebrew / zsh `site-functions`) install, so packaged completions are
 /// dynamic rather than stale static. bash/fish use clap's registration as-is
 /// (Homebrew sources the bash file; fish autoloads the `complete` line, and
-/// ji's `$COMPLETE` wrapper short-circuit prevents the fish-wrapper recursion
+/// dojo's `$COMPLETE` wrapper short-circuit prevents the fish-wrapper recursion
 /// clap's bare-command call would otherwise cause). zsh is made autoload-safe
-/// for an fpath `_ji`.
+/// for an fpath `_dojo`.
 pub fn packaged_completion(shell: &str) -> Result<String> {
     let script = raw_registration(shell)?;
     match shell {
@@ -154,25 +152,25 @@ pub fn packaged_completion(shell: &str) -> Result<String> {
     }
 }
 
-/// Make clap's dynamic zsh registration safe to autoload from `fpath` as `_ji`.
-/// clap's registration ends with `compdef <func> ji`, which assumes the script
-/// is sourced/eval'd. Installed as `site-functions/_ji` and autoloaded by
-/// compinit, the file body instead runs AS `_ji` on the first completion, where
+/// Make clap's dynamic zsh registration safe to autoload from `fpath` as `_dojo`.
+/// clap's registration ends with `compdef <func> dojo`, which assumes the script
+/// is sourced/eval'd. Installed as `site-functions/_dojo` and autoloaded by
+/// compinit, the file body instead runs AS `_dojo` on the first completion, where
 /// a bare `compdef` is too late. Replace the trailing `compdef` with a
-/// dual-mode guard: in autoload mode (`funcstack[1]` == `_ji`) call clap's
+/// dual-mode guard: in autoload mode (`funcstack[1]` == `_dojo`) call clap's
 /// completer directly; otherwise (sourced) register it via `compdef`. If clap's
 /// output format ever changes so the trailing line isn't found, the script is
 /// returned unchanged (still functional in the sourced mode).
 fn make_zsh_autoload_safe(script: &str) -> String {
-    let func = "_clap_dynamic_completer_ji";
-    let trailing = format!("compdef {func} ji");
+    let func = "_clap_dynamic_completer_dojo";
+    let trailing = format!("compdef {func} dojo");
     let replacement = format!(
-        "if [ \"$funcstack[1]\" = \"_ji\" ]; then\n    {func} \"$@\"\nelse\n    compdef {func} ji\nfi"
+        "if [ \"$funcstack[1]\" = \"_dojo\" ]; then\n    {func} \"$@\"\nelse\n    compdef {func} dojo\nfi"
     );
     script.replace(&trailing, &replacement)
 }
 
-/// What `ji config shell init <shell>` streams to stdout.
+/// What `dojo config shell init <shell>` streams to stdout.
 pub fn print_init(shell: &str) -> Result<()> {
     let body = render_managed_body(shell)?;
     print!("{body}");
@@ -183,16 +181,16 @@ pub fn print_init(shell: &str) -> Result<()> {
 // Active-shell detection
 //
 // `$SHELL` is the *login* shell, not the shell the user is actively running.
-// We instead walk up the process tree (via libproc) and stop at the nearest
-// ancestor that is a recognized shell — that is the shell that invoked `ji`.
+// We instead walk up the process tree (libproc on macOS, /proc on Linux) and stop at the nearest
+// ancestor that is a recognized shell — that is the shell that invoked `dojo`.
 // `$SHELL` is consulted only as a fallback, and only when no shell is found.
 // =====================================================================
 
-/// Shells `ji` can install integration for. Single source of truth; the
+/// Shells `dojo` can install integration for. Single source of truth; the
 /// human-readable [`SUPPORTED_SHELLS`] string is kept in sync by a test.
 const SUPPORTED: &[&str] = &["zsh", "bash", "fish"];
 
-/// Recognized shells `ji` does *not* support integration for. Enumerated
+/// Recognized shells `dojo` does *not* support integration for. Enumerated
 /// exhaustively on purpose: a shell missing from this set is classified as a
 /// non-shell and walked past, which could let an outer supported shell win and
 /// violate "nearest recognized shell ancestor wins".
@@ -232,9 +230,9 @@ const MAX_WALK_DEPTH: usize = 24;
 /// Classification of a process executable's basename.
 #[derive(Debug, Clone, PartialEq, Eq)]
 enum Class {
-    /// A shell `ji` supports (zsh/bash/fish).
+    /// A shell `dojo` supports (zsh/bash/fish).
     Supported(String),
-    /// A recognized shell `ji` does not support.
+    /// A recognized shell `dojo` does not support.
     Unsupported(String),
     /// Not a recognized shell — keep walking up the process tree.
     NotAShell,
@@ -306,8 +304,8 @@ fn decide(active: Detection, env_shell_raw: Option<&str>) -> Result<String> {
     match active {
         Detection::Supported(s) => Ok(s),
         Detection::Unsupported(name) => bail!(
-            "detected active shell '{name}', which ji doesn't support (supported: {SUPPORTED_SHELLS}); \
-             pass the shell explicitly, e.g. `ji config shell install zsh`"
+            "detected active shell '{name}', which dojo doesn't support (supported: {SUPPORTED_SHELLS}); \
+             pass the shell explicitly, e.g. `dojo config shell install zsh`"
         ),
         Detection::Unknown => {
             let Some(raw) = env_shell_raw.filter(|s| !s.is_empty()) else {
@@ -328,19 +326,16 @@ fn decide(active: Detection, env_shell_raw: Option<&str>) -> Result<String> {
 /// `parent_of` over the live process tree. `ppid <= 1` (launchd / reparented)
 /// stops the walk.
 fn live_parent(pid: i32) -> Option<i32> {
-    pidinfo::<BSDInfo>(pid, 0)
-        .ok()
-        .map(|info| info.pbi_ppid as i32)
-        .filter(|&ppid| ppid > 1)
+    crate::procinfo::parent_pid(pid)
 }
 
 /// `name_of` over the live process tree: the full executable path, or `None`
 /// if it can't be resolved (e.g. the process exited) — the walk then skips it.
 fn live_exe_path(pid: i32) -> Option<String> {
-    pidpath(pid).ok()
+    crate::procinfo::exe_path(pid)
 }
 
-/// Detect the shell that invoked `ji`: the nearest recognized shell ancestor,
+/// Detect the shell that invoked `dojo`: the nearest recognized shell ancestor,
 /// falling back to `$SHELL` only when none is found. Errors clearly when the
 /// active shell is a recognized-but-unsupported shell.
 pub fn detect_shell() -> Result<String> {
@@ -352,26 +347,26 @@ pub fn detect_shell() -> Result<String> {
 // =====================================================================
 // Parent-shell cd directive + reason-aware diagnosis
 //
-// `ji` changes the parent shell's directory only when its wrapper is active
-// (the wrapper exports `JI_DIRECTIVE_FILE` and sources what we write). When the
+// `dojo` changes the parent shell's directory only when its wrapper is active
+// (the wrapper exports `DOJO_DIRECTIVE_FILE` and sources what we write). When the
 // wrapper is not active we can't cd, so instead of crashing we diagnose why and
 // print a terse, reason-specific note. Diagnosis (process-tree walk + filesystem
 // probes) runs only on the cd-unavailable path — never on the wrapped happy path.
 // =====================================================================
 
-/// Why `ji` could not change the parent shell's directory.
+/// Why `dojo` could not change the parent shell's directory.
 #[derive(Debug, Clone)]
 enum CdUnavailable {
     /// Nothing on disk for the active shell → install.
     NotInstalled,
-    /// Present but the on-disk wrapper isn't exactly what ji ships (drift /
+    /// Present but the on-disk wrapper isn't exactly what dojo ships (drift /
     /// cross-file / shadow / unresolved) → reinstall or remove the conflict.
     NeedsRefresh,
     /// Exact working wrapper on disk, just not active for this invocation.
     InstalledInactive,
-    /// Invoked via an explicit path; the wrapper only wraps bare `ji`.
+    /// Invoked via an explicit path; the wrapper only wraps bare `dojo`.
     RanByPath,
-    /// The active shell isn't one ji supports.
+    /// The active shell isn't one dojo supports.
     UnsupportedShell(String),
 }
 
@@ -411,7 +406,7 @@ fn sq(path: &Path) -> String {
 /// `Err` is reserved for a genuine directive-file write failure (wrapper active
 /// but the write fails) — distinct from `Unavailable` (wrapper not active).
 fn request_cd(path: &Path) -> Result<CdRequest> {
-    match std::env::var("JI_DIRECTIVE_FILE") {
+    match std::env::var("DOJO_DIRECTIVE_FILE") {
         Ok(f) if !f.is_empty() => {
             std::fs::write(&f, format!("cd {}\n", sq(path)))
                 .with_context(|| format!("failed to write directive to {f}"))?;
@@ -423,7 +418,7 @@ fn request_cd(path: &Path) -> Result<CdRequest> {
     }
 }
 
-/// How close the on-disk wrapper is to what `ji` would install right now.
+/// How close the on-disk wrapper is to what `dojo` would install right now.
 /// Only `Working` (byte-exact + nothing shadowing/conflicting) justifies a
 /// "restart" hint.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -481,8 +476,8 @@ fn cd_reason(
     }
 }
 
-/// Pure core: argv[0] contains '/'. Bare `ji` (PATH lookup or `command ji`)
-/// yields just `ji`; `./ji` or `/usr/local/bin/ji` contain '/'.
+/// Pure core: argv[0] contains '/'. Bare `dojo` (PATH lookup or `command dojo`)
+/// yields just `dojo`; `./dojo` or `/usr/local/bin/dojo` contain '/'.
 fn invoked_by_path_arg(arg0: &std::ffi::OsStr) -> bool {
     arg0.to_string_lossy().contains('/')
 }
@@ -579,19 +574,19 @@ fn wrapper_state(env: &ShellEnv, shell: &str) -> WrapperState {
 /// note and the rescue message's subordinate secondary line.
 fn cd_reason_advice(reason: &CdUnavailable) -> String {
     match reason {
-        CdUnavailable::NotInstalled => "enable auto-cd with: ji config shell install".into(),
+        CdUnavailable::NotInstalled => "enable auto-cd with: dojo config shell install".into(),
         CdUnavailable::NeedsRefresh => {
-            "shell integration on disk doesn't match ji — inspect with: ji config shell status, \
+            "shell integration on disk doesn't match dojo — inspect with: dojo config shell status, \
              then reinstall or remove the conflicting entry"
                 .into()
         }
         CdUnavailable::InstalledInactive => {
             "shell integration is installed but wasn't active for this command — open a new shell, \
-             or run `ji` directly (not via `command ji`/a path) — diagnose with: ji config shell status"
+             or run `dojo` directly (not via `command dojo`/a path) — diagnose with: dojo config shell status"
                 .into()
         }
         CdUnavailable::RanByPath => {
-            "invoke `ji` as a bare command — the shell wrapper only wraps `ji` — diagnose with: ji config shell status".into()
+            "invoke `dojo` as a bare command — the shell wrapper only wraps `dojo` — diagnose with: dojo config shell status".into()
         }
         CdUnavailable::UnsupportedShell(n) => {
             format!("auto-cd isn't supported for {n} (supported: {SUPPORTED_SHELLS})")
@@ -600,8 +595,8 @@ fn cd_reason_advice(reason: &CdUnavailable) -> String {
 }
 
 fn warn_cd_unavailable(reason: &CdUnavailable, target: &Path) {
-    eprintln!("(ji)::cd did not change directory to {}", sq(target));
-    eprintln!("(ji)::cd {}", cd_reason_advice(reason));
+    eprintln!("(dojo)::cd did not change directory to {}", sq(target));
+    eprintln!("(dojo)::cd {}", cd_reason_advice(reason));
 }
 
 /// Pure gate (unit-testable): only offer when the active shell is a supported
@@ -671,7 +666,7 @@ fn try_offer_install(reason: &CdUnavailable) -> Result<bool> {
             force: false,
             interactive: true,
         },
-        "(ji)::shell install integration now? [y/N/?] ",
+        "(dojo)::shell install integration now? [y/N/?] ",
     )?;
     render_multi_outcome(&env, &outcome);
 
@@ -691,13 +686,13 @@ fn try_offer_install(reason: &CdUnavailable) -> Result<bool> {
             .find(|(s, h)| s == &active && h.shadows_wrapper());
         if let Some((_, h)) = active_shadow {
             eprintln!(
-                "(ji)::shell installed, but `ji` is shadowed by {}:{} — remove it, then restart your shell",
+                "(dojo)::shell installed, but `dojo` is shadowed by {}:{} — remove it, then restart your shell",
                 h.path.display(),
                 h.line_no
             );
         } else {
             eprintln!(
-                "(ji)::shell installed — restart your shell (or open a new one) to activate auto-cd"
+                "(dojo)::shell installed — restart your shell (or open a new one) to activate auto-cd"
             );
         }
     }
@@ -755,10 +750,10 @@ fn perform_cd(action: CdAction, safety: &Path) -> Result<()> {
         // and the reason-advice is a strictly subordinate secondary line.
         CdAction::Rescue(r) => {
             eprintln!(
-                "(ji)::cd current directory was removed — run: cd {}",
+                "(dojo)::cd current directory was removed — run: cd {}",
                 sq(safety)
             );
-            eprintln!("(ji)::cd {}", cd_reason_advice(&r));
+            eprintln!("(dojo)::cd {}", cd_reason_advice(&r));
             Err(CdNotApplied.into())
         }
     }
@@ -769,7 +764,7 @@ pub fn apply_switch_cd(path: &Path) -> Result<()> {
     perform_cd(decide_cd(&request_cd(path)?, Policy::Switch), path)
 }
 
-/// (2) Follow-up cd: op succeeded, shell dir still valid (CLI `ji new`). A
+/// (2) Follow-up cd: op succeeded, shell dir still valid (CLI `dojo new`). A
 /// wrapper-inactive cannot-cd prints the note and exits 0; a genuine directive
 /// I/O error still propagates (don't swallow disk/permission failures).
 pub fn apply_followup_cd(path: &Path) -> Result<()> {
@@ -799,10 +794,10 @@ pub fn apply_close_cd(origin: &Path, safety: &Path) -> Result<()> {
                 Err(e)
             } else {
                 eprintln!(
-                    "(ji)::cd current directory was removed — run: cd {}",
+                    "(dojo)::cd current directory was removed — run: cd {}",
                     sq(safety)
                 );
-                eprintln!("(ji)::cd (could not write cd directive: {e})");
+                eprintln!("(dojo)::cd (could not write cd directive: {e})");
                 Err(CdNotApplied.into())
             }
         }
@@ -869,13 +864,13 @@ impl ShellEnv {
             "bash" => "init.bash",
             other => bail!("managed_file is only defined for zsh and bash, got: {other}"),
         };
-        Ok(self.xdg_config_home.join("ji").join(name))
+        Ok(self.xdg_config_home.join("dojo").join(name))
     }
 }
 
 fn declined_marker(env: &ShellEnv, shell: &str) -> PathBuf {
     env.xdg_config_home
-        .join("ji")
+        .join("dojo")
         .join(format!("install-prompt-declined-{shell}"))
 }
 
@@ -985,7 +980,7 @@ fn detect_bypass_alias(line: &str) -> Option<(String, String)> {
     if matches!(first, "command" | "env" | "exec" | "nohup") {
         forced = true;
         // Skip any `VAR=val` env-assignments that follow the wrapper (e.g.
-        // `env FOO=1 /opt/bin/ji`); a following `-flag` (e.g. `command -v`) is a
+        // `env FOO=1 /opt/bin/dojo`); a following `-flag` (e.g. `command -v`) is a
         // lookup, not a clean bypass, so bail false-positive-free.
         first = loop {
             match words.next() {
@@ -1003,10 +998,10 @@ fn detect_bypass_alias(line: &str) -> Option<(String, String)> {
             .next()
             .unwrap_or(first)
             .to_ascii_lowercase();
-        if base == "ji" || base == "ji.exe" {
+        if base == "dojo" || base == "dojo.exe" {
             return Some((name, unq.to_string()));
         }
-    } else if forced && first.eq_ignore_ascii_case("ji") {
+    } else if forced && first.eq_ignore_ascii_case("dojo") {
         return Some((name, unq.to_string()));
     }
     None
@@ -1037,7 +1032,7 @@ fn is_var_assignment(tok: &str) -> bool {
     }
 }
 
-/// Heuristic detector for "this line installs ji shell integration". Used only
+/// Heuristic detector for "this line installs dojo shell integration". Used only
 /// to refuse on cross-file hits. Conservative — requires the line to start with
 /// one of a small set of invocation tokens, ruling out comments, aliases, echo
 /// statements, etc.
@@ -1046,17 +1041,17 @@ fn is_legacy_line(line: &str) -> bool {
     if line.is_empty() || line.starts_with('#') {
         return false;
     }
-    let mentions_init = line.contains("ji config shell init")
-        || line.contains("/ji/init.zsh")
-        || line.contains("/ji/init.bash")
-        || line.contains("/ji/init.fish");
+    let mentions_init = line.contains("dojo config shell init")
+        || line.contains("/dojo/init.zsh")
+        || line.contains("/dojo/init.bash")
+        || line.contains("/dojo/init.fish");
     if !mentions_init {
         return false;
     }
     let first = line.split_whitespace().next().unwrap_or("");
     matches!(
         first,
-        "eval" | "source" | "." | "if" | "command" | "type" | "hash" | "ji" | "[" | "[["
+        "eval" | "source" | "." | "if" | "command" | "type" | "hash" | "dojo" | "[" | "[["
     )
 }
 
@@ -1133,7 +1128,7 @@ fn strip_logical_guard(line: &str) -> &str {
         if (head.starts_with("command -v")
             || head.starts_with("type ")
             || head.starts_with("hash "))
-            && head.contains("ji")
+            && head.contains("dojo")
         {
             return line[idx + 2..].trim_start();
         }
@@ -1363,7 +1358,7 @@ enum HitKind {
     MarkerBlock {
         byte_range: Range<usize>,
     },
-    /// A non-marker line that mentions ji integration via eval/source/etc.
+    /// A non-marker line that mentions dojo integration via eval/source/etc.
     Legacy,
     MalformedMarker,
     UnresolvedSource(String),
@@ -1385,10 +1380,10 @@ struct AliasHit {
 }
 
 impl AliasHit {
-    /// True iff this shadows the `ji` wrapper itself (vs a differently-named
+    /// True iff this shadows the `dojo` wrapper itself (vs a differently-named
     /// alias that merely runs the binary directly).
     fn shadows_wrapper(&self) -> bool {
-        matches!(self.kind, ShadowKind::Function) || self.name == "ji"
+        matches!(self.kind, ShadowKind::Function) || self.name == "dojo"
     }
 }
 
@@ -1515,14 +1510,14 @@ fn scan_bypass_aliases(env: &ShellEnv, shell: &str, primary: &Path) -> Vec<Alias
             }
             if shell == "fish" {
                 let line = strip_inline_comment(line.trim_start());
-                if line == "function ji"
-                    || line.starts_with("function ji ")
-                    || line.starts_with("function ji;")
+                if line == "function dojo"
+                    || line.starts_with("function dojo ")
+                    || line.starts_with("function dojo;")
                 {
                     out.push(AliasHit {
                         path: loc.path.clone(),
                         line_no,
-                        name: "ji".into(),
+                        name: "dojo".into(),
                         target: String::new(),
                         kind: ShadowKind::Function,
                     });
@@ -1695,7 +1690,7 @@ fn render_rc_stanza(shell: &str) -> Result<String> {
         other => bail!("render_rc_stanza is only defined for zsh and bash, got: {other}"),
     };
     Ok(format!(
-        "{MARKER_BEGIN}\n{MANAGED_HEADER}. Run `ji config shell uninstall` to remove.\n[ -f \"${{XDG_CONFIG_HOME:-$HOME/.config}}/ji/{init}\" ] \\\n    && . \"${{XDG_CONFIG_HOME:-$HOME/.config}}/ji/{init}\"\n{MARKER_END}\n",
+        "{MARKER_BEGIN}\n{MANAGED_HEADER}. Run `dojo config shell uninstall` to remove.\n[ -f \"${{XDG_CONFIG_HOME:-$HOME/.config}}/dojo/{init}\" ] \\\n    && . \"${{XDG_CONFIG_HOME:-$HOME/.config}}/dojo/{init}\"\n{MARKER_END}\n",
     ))
 }
 
@@ -1746,7 +1741,7 @@ fn write_atomic(path: &Path, contents: &str) -> Result<WriteOutcome> {
         .file_name()
         .map(|s| s.to_string_lossy().into_owned())
         .unwrap_or_default();
-    let tmp = parent.join(format!(".{file_name}.ji.tmp.{pid}"));
+    let tmp = parent.join(format!(".{file_name}.dojo.tmp.{pid}"));
 
     if tmp.exists() {
         let _ = std::fs::remove_file(&tmp);
@@ -1800,41 +1795,41 @@ fn bash_primary(env: &ShellEnv) -> PathBuf {
 }
 
 fn fish_primary(env: &ShellEnv) -> PathBuf {
-    env.xdg_config_home.join("fish/functions/ji.fish")
+    env.xdg_config_home.join("fish/functions/dojo.fish")
 }
 
 fn fish_completions_path(env: &ShellEnv) -> PathBuf {
-    env.xdg_config_home.join("fish/completions/ji.fish")
+    env.xdg_config_home.join("fish/completions/dojo.fish")
 }
 
 /// Any file at this path would be auto-sourced by fish at shell start and
-/// would define `ji` before our lazy `functions/ji.fish` ever loads —
+/// would define `dojo` before our lazy `functions/dojo.fish` ever loads —
 /// silently shadowing us. Treated as a hard conflict at install time.
 fn fish_shadow_path(env: &ShellEnv) -> PathBuf {
-    env.xdg_config_home.join("fish/conf.d/ji.fish")
+    env.xdg_config_home.join("fish/conf.d/dojo.fish")
 }
 
 // =====================================================================
 // fish vendor-completion detection ($fish_complete_path)
 //
-// fish autoloads `ji.fish` from the first dir in `$fish_complete_path` that
-// has it. `ji config shell install fish` writes a completion into the user
+// fish autoloads `dojo.fish` from the first dir in `$fish_complete_path` that
+// has it. `dojo config shell install fish` writes a completion into the user
 // dir (position 1), which shadows Homebrew's dynamic vendor completion. When
 // a reachable dynamic vendor completion exists, install removes the redundant
 // user file instead of writing another; otherwise it writes the user file.
 // =====================================================================
 
-/// Whether `contents` is ji's *dynamic* clap_complete registration — as opposed
+/// Whether `contents` is dojo's *dynamic* clap_complete registration — as opposed
 /// to the pre-0.1.4 static `generate` output or an unrelated file. Requires the
-/// exact callback signature ji emits via `write_registration("COMPLETE", …)`
-/// (see [`raw_registration`]): the `COMPLETE=fish ji` env-completer invocation
-/// and the `ji` command name. The static output contains neither.
-fn is_dynamic_ji_registration(contents: &str) -> bool {
-    contents.contains("COMPLETE=fish ji")
-        && (contents.contains("--command ji") || contents.contains("-c ji"))
+/// exact callback signature dojo emits via `write_registration("COMPLETE", …)`
+/// (see [`raw_registration`]): the `COMPLETE=fish dojo` env-completer invocation
+/// and the `dojo` command name. The static output contains neither.
+fn is_dynamic_dojo_registration(contents: &str) -> bool {
+    contents.contains("COMPLETE=fish dojo")
+        && (contents.contains("--command dojo") || contents.contains("-c dojo"))
 }
 
-/// One `$fish_complete_path` dir that contains a `ji.fish`. An existing but
+/// One `$fish_complete_path` dir that contains a `dojo.fish`. An existing but
 /// unreadable file is recorded with `is_dynamic == false` (a blocker), never
 /// skipped, so first-match order is honored.
 struct ProviderFact {
@@ -1846,16 +1841,16 @@ struct ProviderFact {
 
 /// Order-aware conclusion of the fish completion scan (see [`fish_decide`]).
 struct FishCompletionScan {
-    /// Physical existence of `~/.config/fish/completions/ji.fish`, independent
+    /// Physical existence of `~/.config/fish/completions/dojo.fish`, independent
     /// of whether the user dir is on `$fish_complete_path`.
     user_file_exists: bool,
-    /// The first non-user `ji.fish` in path order, iff it is a dynamic ji
+    /// The first non-user `dojo.fish` in path order, iff it is a dynamic dojo
     /// registration (a reachable vendor completion).
     vendor_provider: Option<PathBuf>,
-    /// The first non-user `ji.fish` in path order, iff it is not dynamic
+    /// The first non-user `dojo.fish` in path order, iff it is not dynamic
     /// (static / foreign / unreadable) — it shadows anything later.
     blocking_non_user: Option<PathBuf>,
-    /// The user dir has a `ji.fish` before a reachable dynamic vendor provider.
+    /// The user dir has a `dojo.fish` before a reachable dynamic vendor provider.
     user_shadows_vendor: bool,
     /// A blocking non-user file precedes the user dir (exotic: user dir not
     /// first), so a written user file would not take effect.
@@ -1892,10 +1887,10 @@ fn same_dir(a: &Path, b: &Path) -> bool {
     norm_dir(a) == norm_dir(b)
 }
 
-/// Walk the ordered `$fish_complete_path`, recording each dir with a `ji.fish`
+/// Walk the ordered `$fish_complete_path`, recording each dir with a `dojo.fish`
 /// (all filesystem/content reads live here). Returns the facts in path order
 /// and the user dir's index (present regardless of whether it holds a
-/// `ji.fish`; `None` if the user dir isn't on the path).
+/// `dojo.fish`; `None` if the user dir isn't on the path).
 fn fish_collect_providers(
     complete_path: &[PathBuf],
     user_dir: &Path,
@@ -1907,24 +1902,24 @@ fn fish_collect_providers(
         if is_user && user_dir_index.is_none() {
             user_dir_index = Some(index);
         }
-        let ji = dir.join("ji.fish");
-        if !ji.is_file() {
+        let dojo = dir.join("dojo.fish");
+        if !dojo.is_file() {
             continue;
         }
         // Unreadable → not dynamic (a blocker), never skipped.
-        let is_dynamic = std::fs::read_to_string(&ji).is_ok_and(|c| is_dynamic_ji_registration(&c));
+        let is_dynamic = std::fs::read_to_string(&dojo).is_ok_and(|c| is_dynamic_dojo_registration(&c));
         facts.push(ProviderFact {
             index,
             is_user,
             is_dynamic,
-            path: ji,
+            path: dojo,
         });
     }
     (facts, user_dir_index)
 }
 
 /// Pure decision over collected facts (no filesystem/fish). The first non-user
-/// `ji.fish` is decisive under fish's first-available-file rule: an earlier
+/// `dojo.fish` is decisive under fish's first-available-file rule: an earlier
 /// static/foreign/unreadable file shadows any later dynamic vendor, so we never
 /// skip it to promote a later dynamic file.
 fn fish_decide(
@@ -1977,7 +1972,7 @@ fn fish_complete_path_live() -> Option<Vec<PathBuf>> {
 
     let nonce = format!("{}-{}", std::process::id(), fish_probe_seq());
     let script = format!(
-        "printf 'JI_FCP_OK:{nonce}\\n'; for d in $fish_complete_path; printf 'JI_FCP\\t%s\\n' $d; end"
+        "printf 'DOJO_FCP_OK:{nonce}\\n'; for d in $fish_complete_path; printf 'DOJO_FCP\\t%s\\n' $d; end"
     );
     let timeout = Duration::from_secs(5);
     let start = Instant::now();
@@ -2026,13 +2021,13 @@ fn fish_complete_path_live() -> Option<Vec<PathBuf>> {
     let _ = reader.join();
     let out = String::from_utf8(bytes).ok()?;
 
-    let sentinel = format!("JI_FCP_OK:{nonce}");
+    let sentinel = format!("DOJO_FCP_OK:{nonce}");
     if !out.lines().any(|l| l == sentinel) {
         return None; // no success sentinel → failure or noise, not an empty path
     }
     Some(
         out.lines()
-            .filter_map(|l| l.strip_prefix("JI_FCP\t"))
+            .filter_map(|l| l.strip_prefix("DOJO_FCP\t"))
             .map(PathBuf::from)
             .collect(),
     )
@@ -2170,9 +2165,9 @@ struct PlannedRemoval {
 /// health (`installed_ok`) is deterministic without re-probing fish.
 #[derive(Clone, Debug, PartialEq, Eq)]
 enum FishCompletionMode {
-    /// No reachable dynamic vendor — ji wrote the user-dir completion.
+    /// No reachable dynamic vendor — dojo wrote the user-dir completion.
     UserFile,
-    /// A dynamic vendor provides completions — ji relies on it (and removed a
+    /// A dynamic vendor provides completions — dojo relies on it (and removed a
     /// redundant/stale user-dir file if present).
     Vendor { provider: PathBuf },
 }
@@ -2210,10 +2205,10 @@ pub fn install(env: &ShellEnv, shell: &str, opts: InstallOpts) -> Result<()> {
         return Ok(());
     }
     if opts.interactive && plan.changed() {
-        let label = "(ji)::shell apply these changes? [y/N/?] ";
+        let label = "(dojo)::shell apply these changes? [y/N/?] ";
         let confirmed = confirm_install(label, || plan.show(&mut std::io::stdout()))?;
         if !confirmed {
-            eprintln!("(ji)::shell install cancelled");
+            eprintln!("(dojo)::shell install cancelled");
             return Ok(());
         }
     }
@@ -2312,13 +2307,13 @@ fn installed_ok(env: &ShellEnv, plan: &ShellInstallPlan) -> bool {
                     };
                     state_for(&fish_completions_path(env), &body) == "present"
                 }
-                // Vendor mode: the provider must still be a dynamic ji completion,
+                // Vendor mode: the provider must still be a dynamic dojo completion,
                 // and every planned removal must have landed. `plan_install_fish`
                 // guarantees no *shadowing* user file survives unplanned, so this
                 // is exactly "no shadowing user file remains"; an intentionally
                 // inert non-shadowing file may remain.
                 Some(FishCompletionMode::Vendor { provider }) => {
-                    std::fs::read_to_string(provider).is_ok_and(|c| is_dynamic_ji_registration(&c))
+                    std::fs::read_to_string(provider).is_ok_and(|c| is_dynamic_dojo_registration(&c))
                         && plan.removals.iter().all(|r| !r.path.exists())
                 }
                 None => false,
@@ -2354,7 +2349,7 @@ fn multi_install(
     let mut failures = Vec::new();
     for (s, e) in probe_errors {
         let err = anyhow::anyhow!("could not probe {s} shell config: {e}");
-        eprintln!("(ji)::shell {s}: {err}");
+        eprintln!("(dojo)::shell {s}: {err}");
         failures.push((s.to_string(), err));
     }
 
@@ -2363,7 +2358,7 @@ fn multi_install(
         match plan_install(env, shell, opts.force, &mut std::io::stderr()) {
             Ok(plan) => plans.push(plan),
             Err(e) => {
-                eprintln!("(ji)::shell {shell}: {e}");
+                eprintln!("(dojo)::shell {shell}: {e}");
                 failures.push((shell.to_string(), e));
             }
         }
@@ -2434,11 +2429,11 @@ fn multi_install(
             }
             Ok(()) => {
                 let err = anyhow::anyhow!("managed files not canonical after apply");
-                eprintln!("(ji)::shell {}: {err}", plan.shell);
+                eprintln!("(dojo)::shell {}: {err}", plan.shell);
                 outcome.failures.push((plan.shell.clone(), err));
             }
             Err(e) => {
-                eprintln!("(ji)::shell {}: {e}", plan.shell);
+                eprintln!("(dojo)::shell {}: {e}", plan.shell);
                 outcome.failures.push((plan.shell.clone(), e));
             }
         }
@@ -2464,15 +2459,15 @@ fn render_multi_outcome(env: &ShellEnv, o: &MultiOutcome) {
     for shell in &o.skipped {
         match shell.as_str() {
             "bash" => eprintln!(
-                "(ji)::shell skipped bash; no {0}/.bash_profile, {0}/.bash_login, or {0}/.profile",
+                "(dojo)::shell skipped bash; no {0}/.bash_profile, {0}/.bash_login, or {0}/.profile",
                 env.home.display()
             ),
             "zsh" => eprintln!(
-                "(ji)::shell skipped zsh; no {}/.zshrc",
+                "(dojo)::shell skipped zsh; no {}/.zshrc",
                 env.zdotdir.display()
             ),
             "fish" => eprintln!(
-                "(ji)::shell skipped fish; {}/fish not found",
+                "(dojo)::shell skipped fish; {}/fish not found",
                 env.xdg_config_home.display()
             ),
             _ => {}
@@ -2480,13 +2475,13 @@ fn render_multi_outcome(env: &ShellEnv, o: &MultiOutcome) {
     }
 
     if o.cancelled {
-        eprintln!("(ji)::shell install cancelled");
+        eprintln!("(dojo)::shell install cancelled");
     } else if !o.applied.is_empty() {
-        eprintln!("(ji)::shell configured {} shell(s)", o.applied.len());
+        eprintln!("(dojo)::shell configured {} shell(s)", o.applied.len());
     } else if integration_present(o) {
-        eprintln!("(ji)::shell all configured shells already up-to-date");
+        eprintln!("(dojo)::shell all configured shells already up-to-date");
     } else if o.failures.is_empty() {
-        eprintln!("(ji)::shell no shells with an existing config found");
+        eprintln!("(dojo)::shell no shells with an existing config found");
     }
 }
 
@@ -2498,7 +2493,7 @@ pub fn install_all(env: &ShellEnv, opts: InstallOpts) -> Result<()> {
         &probe.absent,
         probe.errored,
         opts,
-        "(ji)::shell apply these changes? [y/N/?] ",
+        "(dojo)::shell apply these changes? [y/N/?] ",
     )?;
     render_multi_outcome(env, &outcome);
     for s in outcome.applied.iter().chain(outcome.unchanged.iter()) {
@@ -2506,7 +2501,7 @@ pub fn install_all(env: &ShellEnv, opts: InstallOpts) -> Result<()> {
     }
     if !outcome.failures.is_empty() {
         bail!(
-            "(ji)::shell {} shell(s) failed to configure",
+            "(dojo)::shell {} shell(s) failed to configure",
             outcome.failures.len()
         );
     }
@@ -2589,13 +2584,13 @@ fn emit_shadow_notes(notes: &mut dyn std::io::Write, shadows: &[AliasHit]) {
     for h in shadows {
         if h.shadows_wrapper() {
             let what = if matches!(h.kind, ShadowKind::Function) {
-                "function ji".into()
+                "function dojo".into()
             } else {
                 format!("alias {}", h.name)
             };
             let _ = writeln!(
                 notes,
-                "(ji)::shell: note: `ji` shadowed by {} in {}:{} — remove it for auto-cd to work",
+                "(dojo)::shell: note: `dojo` shadowed by {} in {}:{} — remove it for auto-cd to work",
                 what,
                 h.path.display(),
                 h.line_no
@@ -2603,7 +2598,7 @@ fn emit_shadow_notes(notes: &mut dyn std::io::Write, shadows: &[AliasHit]) {
         } else {
             let _ = writeln!(
                 notes,
-                "(ji)::shell: note: alias {} in {}:{} runs ji directly (bypassing auto-cd; use `ji`)",
+                "(dojo)::shell: note: alias {} in {}:{} runs dojo directly (bypassing auto-cd; use `dojo`)",
                 h.name,
                 h.path.display(),
                 h.line_no
@@ -2630,7 +2625,7 @@ fn plan_install_posix(
             .with_context(|| format!("failed to canonicalize {}", primary.display()))?;
         if chezmoi_strong_signal(&canonical) && !force {
             bail!(
-                "(ji)::shell: {} resolves into a chezmoi source directory ({}); edits will be reverted by `chezmoi apply`. Pass --force to install anyway.",
+                "(dojo)::shell: {} resolves into a chezmoi source directory ({}); edits will be reverted by `chezmoi apply`. Pass --force to install anyway.",
                 primary.display(),
                 canonical.display(),
             );
@@ -2638,7 +2633,7 @@ fn plan_install_posix(
         if dotfile_manager_soft_signal(env, &canonical) {
             let _ = writeln!(
                 notes,
-                "(ji)::shell: note: {} resolves to {} (outside $HOME or dotfile-manager-shaped layout); edits may be reverted by your dotfile tool.",
+                "(dojo)::shell: note: {} resolves to {} (outside $HOME or dotfile-manager-shaped layout); edits may be reverted by your dotfile tool.",
                 primary.display(),
                 canonical.display(),
             );
@@ -2646,7 +2641,7 @@ fn plan_install_posix(
         let md = std::fs::metadata(&primary)
             .with_context(|| format!("failed to stat {}", primary.display()))?;
         if md.permissions().readonly() {
-            bail!("(ji)::shell: {} is not writable", primary.display());
+            bail!("(dojo)::shell: {} is not writable", primary.display());
         }
     }
 
@@ -2661,7 +2656,7 @@ fn plan_install_posix(
     if !malformed.is_empty() && !force {
         let first = malformed[0];
         bail!(
-            "(ji)::shell: malformed marker block in {}:{} — edit manually or pass --force to overwrite",
+            "(dojo)::shell: malformed marker block in {}:{} — edit manually or pass --force to overwrite",
             first.path.display(),
             first.line_no,
         );
@@ -2688,7 +2683,7 @@ fn plan_install_posix(
         if let HitKind::UnresolvedSource(raw) = &u.kind {
             let _ = writeln!(
                 notes,
-                "(ji)::shell: note: unresolved source-like line in {}:{} (`{}`)",
+                "(dojo)::shell: note: unresolved source-like line in {}:{} (`{}`)",
                 u.path.display(),
                 u.line_no,
                 raw,
@@ -2705,7 +2700,7 @@ fn plan_install_posix(
             .map(|(p, n)| format!(" (via source line {} in {})", n, p.display()))
             .unwrap_or_default();
         bail!(
-            "(ji)::shell: existing integration found in {}:{}{} — remove it manually, or pass --force to install anyway.",
+            "(dojo)::shell: existing integration found in {}:{}{} — remove it manually, or pass --force to install anyway.",
             first.path.display(),
             first.line_no,
             via,
@@ -2717,7 +2712,7 @@ fn plan_install_posix(
         && !force
     {
         bail!(
-            "(ji)::shell: existing integration line found in {}:{} — remove it manually, or pass --force to install alongside it.",
+            "(dojo)::shell: existing integration line found in {}:{} — remove it manually, or pass --force to install alongside it.",
             h.path.display(),
             h.line_no,
         );
@@ -2806,7 +2801,7 @@ fn plan_install_fish(
 
     if shadow.exists() && !force {
         bail!(
-            "(ji)::shell: {} exists and would shadow our `functions/ji.fish` (fish auto-sources conf.d at startup, blocking the autoload) — remove it manually, or pass --force.",
+            "(dojo)::shell: {} exists and would shadow our `functions/dojo.fish` (fish auto-sources conf.d at startup, blocking the autoload) — remove it manually, or pass --force.",
             shadow.display(),
         );
     }
@@ -2822,7 +2817,7 @@ fn plan_install_fish(
     if !malformed.is_empty() && !force {
         let first = malformed[0];
         bail!(
-            "(ji)::shell: malformed marker block in {}:{} — edit manually or pass --force to overwrite",
+            "(dojo)::shell: malformed marker block in {}:{} — edit manually or pass --force to overwrite",
             first.path.display(),
             first.line_no,
         );
@@ -2838,20 +2833,20 @@ fn plan_install_fish(
     if !nonprimary_hits.is_empty() && !force {
         let first = nonprimary_hits[0];
         bail!(
-            "(ji)::shell: existing integration found in {}:{} — remove it manually, or pass --force to install anyway.",
+            "(dojo)::shell: existing integration found in {}:{} — remove it manually, or pass --force to install anyway.",
             first.path.display(),
             first.line_no,
         );
     }
     emit_shadow_notes(notes, &shadows);
 
-    // The wrapper is always installed; a non-ji-managed wrapper still hard-bails.
+    // The wrapper is always installed; a non-dojo-managed wrapper still hard-bails.
     if primary.exists() {
         let existing = std::fs::read_to_string(&primary)
             .with_context(|| format!("failed to read {}", primary.display()))?;
         if !is_managed(&existing) && !force {
             bail!(
-                "(ji)::shell: {} exists and is not ji-managed — remove it manually, or pass --force to overwrite (wrapper).",
+                "(dojo)::shell: {} exists and is not dojo-managed — remove it manually, or pass --force to overwrite (wrapper).",
                 primary.display(),
             );
         }
@@ -2866,9 +2861,9 @@ fn plan_install_fish(
     let mut removals = Vec::new();
 
     // Completion delivery. When a reachable *dynamic* vendor completion exists
-    // (e.g. Homebrew's `vendor_completions.d/ji.fish`), rely on it and remove a
+    // (e.g. Homebrew's `vendor_completions.d/dojo.fish`), rely on it and remove a
     // redundant/stale user-dir completion rather than writing another that would
-    // shadow it (fish autoloads the first `ji.fish` in `$fish_complete_path`).
+    // shadow it (fish autoloads the first `dojo.fish` in `$fish_complete_path`).
     // Otherwise (cargo/manual, or probe failure) write the user-dir completion.
     let state = fish_completion_state(env);
     let scan = &state.scan;
@@ -2886,20 +2881,20 @@ fn plan_install_fish(
                 });
                 let _ = writeln!(
                     notes,
-                    "(ji)::shell: fish completions are provided by {}; removing the redundant/stale user-dir completion {}",
+                    "(dojo)::shell: fish completions are provided by {}; removing the redundant/stale user-dir completion {}",
                     provider.display(),
                     completions.display(),
                 );
             } else if scan.user_shadows_vendor {
                 bail!(
-                    "(ji)::shell: {} shadows the vendor completion {} and is not ji-managed — remove it manually, or pass --force.",
+                    "(dojo)::shell: {} shadows the vendor completion {} and is not dojo-managed — remove it manually, or pass --force.",
                     completions.display(),
                     provider.display(),
                 );
             } else {
                 let _ = writeln!(
                     notes,
-                    "(ji)::shell: fish completions are provided by {} ({} is present but not in effect).",
+                    "(dojo)::shell: fish completions are provided by {} ({} is present but not in effect).",
                     provider.display(),
                     completions.display(),
                 );
@@ -2907,7 +2902,7 @@ fn plan_install_fish(
         } else {
             let _ = writeln!(
                 notes,
-                "(ji)::shell: fish completions are provided by {}.",
+                "(dojo)::shell: fish completions are provided by {}.",
                 provider.display(),
             );
         }
@@ -2915,18 +2910,18 @@ fn plan_install_fish(
     } else {
         if scan.user_file_exists && !user_managed && !force {
             bail!(
-                "(ji)::shell: {} exists and is not ji-managed — remove it manually, or pass --force to overwrite (completions).",
+                "(dojo)::shell: {} exists and is not dojo-managed — remove it manually, or pass --force to overwrite (completions).",
                 completions.display(),
             );
         }
-        // Exotic: a non-ji `ji.fish` earlier in the path would shadow the file we
+        // Exotic: a non-dojo `dojo.fish` earlier in the path would shadow the file we
         // write, so warn (still write it — harmless).
         if scan.blocking_precedes_user
             && let Some(blocker) = &scan.blocking_non_user
         {
             let _ = writeln!(
                 notes,
-                "(ji)::shell: note: {} is earlier in $fish_complete_path and is not ji's dynamic completion — the user completion won't take effect until it's removed manually.",
+                "(dojo)::shell: note: {} is earlier in $fish_complete_path and is not dojo's dynamic completion — the user completion won't take effect until it's removed manually.",
                 blocker.display(),
             );
         }
@@ -2954,41 +2949,41 @@ fn apply_plan(plan: &ShellInstallPlan) -> Result<()> {
         let outcome = write_atomic(&w.path, &w.after)?;
         match (w.role, outcome) {
             (WriteRole::ManagedFile, WriteOutcome::Created) => {
-                eprintln!("(ji)::shell installed managed file {}", w.path.display());
+                eprintln!("(dojo)::shell installed managed file {}", w.path.display());
             }
             (WriteRole::ManagedFile, WriteOutcome::Updated) => {
-                eprintln!("(ji)::shell updated managed file {}", w.path.display());
+                eprintln!("(dojo)::shell updated managed file {}", w.path.display());
             }
             (WriteRole::ManagedFile, WriteOutcome::Unchanged) => {}
             (WriteRole::PrimaryRc, WriteOutcome::Created) => eprintln!(
-                "(ji)::shell created {} with managed block",
+                "(dojo)::shell created {} with managed block",
                 w.path.display()
             ),
             (WriteRole::PrimaryRc, WriteOutcome::Updated) => eprintln!(
-                "(ji)::shell updated {} with managed block",
+                "(dojo)::shell updated {} with managed block",
                 w.path.display()
             ),
             (WriteRole::PrimaryRc, WriteOutcome::Unchanged) => {
-                eprintln!("(ji)::shell {} already up-to-date", w.path.display());
+                eprintln!("(dojo)::shell {} already up-to-date", w.path.display());
             }
             (WriteRole::FishWrapper, WriteOutcome::Created) => {
-                eprintln!("(ji)::shell wrapper installed in {}", w.path.display());
+                eprintln!("(dojo)::shell wrapper installed in {}", w.path.display());
             }
             (WriteRole::FishWrapper, WriteOutcome::Updated) => {
-                eprintln!("(ji)::shell wrapper updated in {}", w.path.display());
+                eprintln!("(dojo)::shell wrapper updated in {}", w.path.display());
             }
             (WriteRole::FishWrapper, WriteOutcome::Unchanged) => eprintln!(
-                "(ji)::shell wrapper already up-to-date in {}",
+                "(dojo)::shell wrapper already up-to-date in {}",
                 w.path.display()
             ),
             (WriteRole::FishCompletions, WriteOutcome::Created) => {
-                eprintln!("(ji)::shell completions installed in {}", w.path.display());
+                eprintln!("(dojo)::shell completions installed in {}", w.path.display());
             }
             (WriteRole::FishCompletions, WriteOutcome::Updated) => {
-                eprintln!("(ji)::shell completions updated in {}", w.path.display());
+                eprintln!("(dojo)::shell completions updated in {}", w.path.display());
             }
             (WriteRole::FishCompletions, WriteOutcome::Unchanged) => eprintln!(
-                "(ji)::shell completions already up-to-date in {}",
+                "(dojo)::shell completions already up-to-date in {}",
                 w.path.display()
             ),
         }
@@ -2999,7 +2994,7 @@ fn apply_plan(plan: &ShellInstallPlan) -> Result<()> {
     // a sequential multi-file apply, like the writes above.
     for r in &plan.removals {
         match std::fs::remove_file(&r.path) {
-            Ok(()) => eprintln!("(ji)::shell removed {}", r.path.display()),
+            Ok(()) => eprintln!("(dojo)::shell removed {}", r.path.display()),
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
             Err(e) => {
                 return Err(anyhow::Error::new(e))
@@ -3045,7 +3040,7 @@ fn uninstall_posix(env: &ShellEnv, shell: &str, opts: UninstallOpts) -> Result<(
             } else {
                 write_atomic(&primary, &after)?;
                 eprintln!(
-                    "(ji)::shell removed managed block from {}",
+                    "(dojo)::shell removed managed block from {}",
                     primary.display()
                 );
             }
@@ -3059,7 +3054,7 @@ fn uninstall_posix(env: &ShellEnv, shell: &str, opts: UninstallOpts) -> Result<(
         } else {
             std::fs::remove_file(&managed)
                 .with_context(|| format!("failed to remove {}", managed.display()))?;
-            eprintln!("(ji)::shell removed managed file {}", managed.display());
+            eprintln!("(dojo)::shell removed managed file {}", managed.display());
         }
         nothing_to_do = false;
     }
@@ -3067,7 +3062,7 @@ fn uninstall_posix(env: &ShellEnv, shell: &str, opts: UninstallOpts) -> Result<(
     let _ = opts.force; // reserved for symmetry with install; nothing to override here
 
     if nothing_to_do {
-        eprintln!("(ji)::shell nothing to uninstall for {shell}");
+        eprintln!("(dojo)::shell nothing to uninstall for {shell}");
     }
     if !opts.dry_run {
         clear_install_prompt_declined(env, shell);
@@ -3094,19 +3089,19 @@ fn uninstall_fish(env: &ShellEnv, opts: UninstallOpts) -> Result<()> {
             } else {
                 std::fs::remove_file(path)
                     .with_context(|| format!("failed to remove {}", path.display()))?;
-                eprintln!("(ji)::shell removed {}", path.display());
+                eprintln!("(dojo)::shell removed {}", path.display());
             }
             nothing_to_do = false;
         } else {
             eprintln!(
-                "(ji)::shell: leaving {} (not ji-managed; pass --force to remove)",
+                "(dojo)::shell: leaving {} (not dojo-managed; pass --force to remove)",
                 path.display()
             );
         }
     }
 
     if nothing_to_do {
-        eprintln!("(ji)::shell nothing to uninstall for fish");
+        eprintln!("(dojo)::shell nothing to uninstall for fish");
     }
     if !opts.dry_run {
         clear_install_prompt_declined(env, "fish");
@@ -3231,7 +3226,7 @@ fn status_posix(env: &ShellEnv, shell: &str, w: &mut dyn std::io::Write) -> Resu
     let body = render_managed_body(shell)?;
     let stanza = render_rc_stanza(shell)?;
 
-    let _ = writeln!(w, "ji shell integration: {shell}");
+    let _ = writeln!(w, "dojo shell integration: {shell}");
     let _ = writeln!(w, "  primary rc: {}", display_canonical(&primary));
     if shell == "bash" {
         let candidates: Vec<String> = [".bash_profile", ".bash_login", ".profile"]
@@ -3291,14 +3286,14 @@ fn status_posix(env: &ShellEnv, shell: &str, w: &mut dyn std::io::Write) -> Resu
         let _ = writeln!(w, "  bypass aliases:");
         for h in &shadows {
             let what = if matches!(h.kind, ShadowKind::Function) {
-                "function ji".to_string()
+                "function dojo".to_string()
             } else {
                 format!("alias {} -> {}", h.name, h.target)
             };
             let note = if h.shadows_wrapper() {
                 "shadows the wrapper"
             } else {
-                "runs ji directly"
+                "runs dojo directly"
             };
             let _ = writeln!(
                 w,
@@ -3336,7 +3331,7 @@ fn fish_completion_status_lines(
     let up = user_path.display();
     if probe_failed {
         return vec![
-            "  note: could not query fish's $fish_complete_path (fish missing or slow); vendor-shadow detection unavailable — run `ji config shell install fish` if completions misbehave".to_string(),
+            "  note: could not query fish's $fish_complete_path (fish missing or slow); vendor-shadow detection unavailable — run `dojo config shell install fish` if completions misbehave".to_string(),
             format!("  completions file: {up} ({user_state})"),
         ];
     }
@@ -3346,15 +3341,15 @@ fn fish_completion_status_lines(
         if scan.user_file_exists && scan.user_shadows_vendor {
             if !user_managed {
                 lines.push(format!(
-                    "  WARNING {up} (not ji-managed) shadows {vp} — remove it manually or run `ji config shell install fish --force`"
+                    "  WARNING {up} (not dojo-managed) shadows {vp} — remove it manually or run `dojo config shell install fish --force`"
                 ));
             } else if user_state == "drift" {
                 lines.push(format!(
-                    "  WARNING {up} is a stale completion shadowing {vp} — run `ji config shell install fish` to remove it"
+                    "  WARNING {up} is a stale completion shadowing {vp} — run `dojo config shell install fish` to remove it"
                 ));
             } else {
                 lines.push(format!(
-                    "  note: {up} shadows {vp} (redundant); `ji config shell install fish` will remove it"
+                    "  note: {up} shadows {vp} (redundant); `dojo config shell install fish` will remove it"
                 ));
             }
         } else if scan.user_file_exists {
@@ -3369,7 +3364,7 @@ fn fish_completion_status_lines(
     }
     if let Some(p) = &scan.blocking_non_user {
         lines.push(format!(
-            "  WARNING {} is earlier in $fish_complete_path and is not ji's dynamic completion — it shadows any ji completion later in the path; remove it manually",
+            "  WARNING {} is earlier in $fish_complete_path and is not dojo's dynamic completion — it shadows any dojo completion later in the path; remove it manually",
             p.display()
         ));
     }
@@ -3382,7 +3377,7 @@ fn status_fish(env: &ShellEnv, w: &mut dyn std::io::Write) -> Result<()> {
     let shadow = fish_shadow_path(env);
     let wrapper_body = render_fish_wrapper_body();
 
-    let _ = writeln!(w, "ji shell integration: fish");
+    let _ = writeln!(w, "dojo shell integration: fish");
     let _ = writeln!(
         w,
         "  wrapper file: {} ({})",
@@ -3446,14 +3441,14 @@ fn status_fish(env: &ShellEnv, w: &mut dyn std::io::Write) -> Result<()> {
         let _ = writeln!(w, "  bypass aliases:");
         for h in &shadows {
             let what = if matches!(h.kind, ShadowKind::Function) {
-                "function ji".to_string()
+                "function dojo".to_string()
             } else {
                 format!("alias {} -> {}", h.name, h.target)
             };
             let note = if h.shadows_wrapper() {
                 "shadows the wrapper"
             } else {
-                "runs ji directly"
+                "runs dojo directly"
             };
             let _ = writeln!(
                 w,
@@ -3479,7 +3474,7 @@ fn state_for(path: &Path, desired: &str) -> &'static str {
     }
 }
 
-/// Whether the rc's ji marker block exactly matches the canonical `stanza`.
+/// Whether the rc's dojo marker block exactly matches the canonical `stanza`.
 /// Shared comparator for `status` (formatted below) and cd diagnosis.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum TriState {
@@ -3536,28 +3531,28 @@ mod alias_tests {
     #[test]
     fn detect_bypass_alias_flags_direct_binary_aliases() {
         for (line, name, target) in [
-            ("alias ji=/opt/bin/ji", "ji", "/opt/bin/ji"),
-            ("alias j=/opt/bin/ji", "j", "/opt/bin/ji"),
+            ("alias dojo=/opt/bin/dojo", "dojo", "/opt/bin/dojo"),
+            ("alias j=/opt/bin/dojo", "j", "/opt/bin/dojo"),
             (
-                "alias ji='/opt/bin/ji --color'",
-                "ji",
-                "/opt/bin/ji --color",
+                "alias dojo='/opt/bin/dojo --color'",
+                "dojo",
+                "/opt/bin/dojo --color",
             ),
-            ("alias ji='command ji'", "ji", "command ji"),
+            ("alias dojo='command dojo'", "dojo", "command dojo"),
             (
-                "alias gji='command /opt/bin/ji'",
+                "alias gji='command /opt/bin/dojo'",
                 "gji",
-                "command /opt/bin/ji",
+                "command /opt/bin/dojo",
             ),
-            (r#"alias ji="$HOME/bin/ji""#, "ji", "$HOME/bin/ji"),
-            ("alias ji /usr/bin/ji", "ji", "/usr/bin/ji"),
-            ("alias ji 'command ji'", "ji", "command ji"),
+            (r#"alias dojo="$HOME/bin/dojo""#, "dojo", "$HOME/bin/dojo"),
+            ("alias dojo /usr/bin/dojo", "dojo", "/usr/bin/dojo"),
+            ("alias dojo 'command dojo'", "dojo", "command dojo"),
             (
-                "alias ji='env FOO=bar /opt/bin/ji'",
-                "ji",
-                "env FOO=bar /opt/bin/ji",
+                "alias dojo='env FOO=bar /opt/bin/dojo'",
+                "dojo",
+                "env FOO=bar /opt/bin/dojo",
             ),
-            ("alias ji='env FOO=1 ji'", "ji", "env FOO=1 ji"),
+            ("alias dojo='env FOO=1 dojo'", "dojo", "env FOO=1 dojo"),
         ] {
             assert_eq!(
                 detect_bypass_alias(line),
@@ -3570,28 +3565,28 @@ mod alias_tests {
     #[test]
     fn detect_bypass_alias_rejects_non_bypass_aliases() {
         for line in [
-            "alias ji=ji",
-            "alias ji='ji --x'",
-            "alias x='echo /opt/bin/ji'",
-            "alias ji='command -v /opt/bin/ji'",
+            "alias dojo=dojo",
+            "alias dojo='dojo --x'",
+            "alias x='echo /opt/bin/dojo'",
+            "alias dojo='command -v /opt/bin/dojo'",
             "alias x=/p/jj",
-            "alias jcsi='ji config shell init zsh'",
-            "alias ji='$(which ji)'",
-            "unalias ji",
-            "# alias ji=",
-            "alias ji",
+            "alias jcsi='dojo config shell init zsh'",
+            "alias dojo='$(which dojo)'",
+            "unalias dojo",
+            "# alias dojo=",
+            "alias dojo",
         ] {
             assert_eq!(detect_bypass_alias(line), None, "{line}");
         }
     }
 
     #[test]
-    fn alias_hit_shadows_wrapper_for_ji_alias_or_function() {
+    fn alias_hit_shadows_wrapper_for_dojo_alias_or_function() {
         let alias_ji = AliasHit {
             path: PathBuf::from("/tmp/rc"),
             line_no: 1,
-            name: "ji".into(),
-            target: "/opt/bin/ji".into(),
+            name: "dojo".into(),
+            target: "/opt/bin/dojo".into(),
             kind: ShadowKind::Alias,
         };
         let alias_j = AliasHit {
@@ -3625,7 +3620,7 @@ mod detection_tests {
         for s in ["sh", "dash", "nu", "nushell", "tcsh", "pwsh", "xonsh"] {
             assert_eq!(classify(s), Class::Unsupported(s.to_string()));
         }
-        for s in ["make", "python", "login", "ji", "code"] {
+        for s in ["make", "python", "login", "dojo", "code"] {
             assert_eq!(classify(s), Class::NotAShell);
         }
     }
@@ -3682,7 +3677,7 @@ mod detection_tests {
 
     #[test]
     fn direct_parent_supported_shell() {
-        let (d, exe) = walk(100, &[(100, 50, "ji"), (50, 40, "/bin/zsh")]);
+        let (d, exe) = walk(100, &[(100, 50, "dojo"), (50, 40, "/bin/zsh")]);
         assert_eq!(d, Detection::Supported("zsh".into()));
         assert_eq!(exe.as_deref(), Some("/bin/zsh"));
     }
@@ -3692,13 +3687,13 @@ mod detection_tests {
         // make, then bash.
         let (d, _) = walk(
             100,
-            &[(100, 50, "ji"), (50, 40, "make"), (40, 30, "/bin/bash")],
+            &[(100, 50, "dojo"), (50, 40, "make"), (40, 30, "/bin/bash")],
         );
         assert_eq!(d, Detection::Supported("bash".into()));
         // sudo -> env -> fish.
         let (d, _) = walk(
             10,
-            &[(10, 9, "ji"), (9, 8, "sudo"), (8, 7, "env"), (7, 6, "fish")],
+            &[(10, 9, "dojo"), (9, 8, "sudo"), (8, 7, "env"), (7, 6, "fish")],
         );
         assert_eq!(d, Detection::Supported("fish".into()));
     }
@@ -3707,20 +3702,20 @@ mod detection_tests {
     fn nearest_shell_wins_sh_below_fish() {
         // sh is the nearest shell ancestor; fish is above it. sh wins (unsupported),
         // and $SHELL is never consulted by the walk.
-        let (d, _) = walk(100, &[(100, 50, "ji"), (50, 40, "sh"), (40, 30, "fish")]);
+        let (d, _) = walk(100, &[(100, 50, "dojo"), (50, 40, "sh"), (40, 30, "fish")]);
         assert_eq!(d, Detection::Unsupported("sh".into()));
     }
 
     #[test]
     fn direct_parent_unsupported_shell() {
-        let (d, _) = walk(100, &[(100, 50, "ji"), (50, 40, "nu")]);
+        let (d, _) = walk(100, &[(100, 50, "dojo"), (50, 40, "nu")]);
         assert_eq!(d, Detection::Unsupported("nu".into()));
     }
 
     #[test]
     fn no_shell_chain_terminating_at_init_is_unknown() {
         // ppid 1 stops the walk; no recognized shell seen.
-        let (d, exe) = walk(100, &[(100, 50, "ji"), (50, 40, "make"), (40, 1, "login")]);
+        let (d, exe) = walk(100, &[(100, 50, "dojo"), (50, 40, "make"), (40, 1, "login")]);
         assert_eq!(d, Detection::Unknown);
         assert_eq!(exe, None);
     }
@@ -3731,7 +3726,7 @@ mod detection_tests {
         let (d, _) = walk(
             100,
             &[
-                (100, 50, "ji"),
+                (100, 50, "dojo"),
                 (50, 40, "make"),
                 (40, 30, ""),
                 (30, 20, "/bin/zsh"),
@@ -3744,7 +3739,7 @@ mod detection_tests {
     fn depth_cap_bounds_the_walk() {
         // A non-shell chain longer than the cap, with a shell only beyond it → Unknown.
         let deep = 101 + MAX_WALK_DEPTH as i32 + 5;
-        let mut rows: Vec<(i32, i32, &str)> = vec![(100, 101, "ji")];
+        let mut rows: Vec<(i32, i32, &str)> = vec![(100, 101, "dojo")];
         for pid in 101..deep {
             rows.push((pid, pid + 1, "make"));
         }
@@ -3756,7 +3751,7 @@ mod detection_tests {
     #[test]
     fn cycle_is_bounded() {
         // 50 <-> 60 cycle, all non-shells: the depth cap terminates the walk.
-        let (d, _) = walk(100, &[(100, 50, "ji"), (50, 60, "make"), (60, 50, "make")]);
+        let (d, _) = walk(100, &[(100, 50, "dojo"), (50, 60, "make"), (60, 50, "make")]);
         assert_eq!(d, Detection::Unknown);
     }
 
@@ -3950,7 +3945,7 @@ mod cd_tests {
         let env = env_for(&tmp);
         let expected = env
             .xdg_config_home
-            .join("ji")
+            .join("dojo")
             .join("install-prompt-declined-zsh");
         assert_eq!(declined_marker(&env, "zsh"), expected);
 
@@ -3977,10 +3972,10 @@ mod cd_tests {
     fn invoked_by_path_arg_detects_slash() {
         use std::ffi::OsStr;
         use std::os::unix::ffi::OsStrExt;
-        assert!(!invoked_by_path_arg(OsStr::new("ji")));
-        assert!(invoked_by_path_arg(OsStr::new("./ji")));
-        assert!(invoked_by_path_arg(OsStr::new("/usr/local/bin/ji")));
-        assert!(invoked_by_path_arg(OsStr::from_bytes(b"/\xff/ji")));
+        assert!(!invoked_by_path_arg(OsStr::new("dojo")));
+        assert!(invoked_by_path_arg(OsStr::new("./dojo")));
+        assert!(invoked_by_path_arg(OsStr::new("/usr/local/bin/dojo")));
+        assert!(invoked_by_path_arg(OsStr::from_bytes(b"/\xff/dojo")));
     }
 
     // ---- [y/N/?] parsing + loop ----
@@ -4156,17 +4151,17 @@ mod cd_tests {
     fn packaged_zsh_is_autoload_safe() {
         let zsh = packaged_completion("zsh").unwrap();
         assert!(
-            zsh.starts_with("#compdef ji"),
-            "packaged _ji must start with the #compdef autoload header"
+            zsh.starts_with("#compdef dojo"),
+            "packaged _dojo must start with the #compdef autoload header"
         );
         assert!(
             zsh.contains("funcstack[1]"),
-            "packaged _ji must carry the dual-mode autoload guard"
+            "packaged _dojo must carry the dual-mode autoload guard"
         );
-        // The bare trailing `compdef … ji` must have been replaced by the guard.
+        // The bare trailing `compdef … dojo` must have been replaced by the guard.
         assert!(
             !zsh.trim_end()
-                .ends_with("compdef _clap_dynamic_completer_ji ji")
+                .ends_with("compdef _clap_dynamic_completer_dojo dojo")
         );
         // bash/fish pass clap's registration through unchanged (dynamic).
         assert!(packaged_completion("bash").unwrap().contains("COMPLETE"));
@@ -4244,10 +4239,10 @@ mod cd_tests {
     fn wrapper_state_legacy_line_is_drift_not_working() {
         let tmp = TempDir::new().unwrap();
         let env = env_for(&tmp);
-        // A legacy `eval "$(ji config shell init zsh)"` line, no canonical install.
+        // A legacy `eval "$(dojo config shell init zsh)"` line, no canonical install.
         std::fs::write(
             env.home.join(".zshrc"),
-            "eval \"$(ji config shell init zsh)\"\n",
+            "eval \"$(dojo config shell init zsh)\"\n",
         )
         .unwrap();
         assert_eq!(wrapper_state(&env, "zsh"), WrapperState::Drift);
@@ -4264,11 +4259,11 @@ mod fish_completion_tests {
         packaged_completion("fish").unwrap()
     }
 
-    /// A stale static user completion (pre-0.1.4 `generate` output), ji-managed:
-    /// contains the managed header but not ji's dynamic callback signature.
+    /// A stale static user completion (pre-0.1.4 `generate` output), dojo-managed:
+    /// contains the managed header but not dojo's dynamic callback signature.
     fn static_managed() -> String {
         format!(
-            "{MANAGED_HEADER}\ncomplete -c ji -n \"__fish_ji_needs_command\" -f -a \"switch\"\n"
+            "{MANAGED_HEADER}\ncomplete -c dojo -n \"__fish_ji_needs_command\" -f -a \"switch\"\n"
         )
     }
 
@@ -4295,7 +4290,7 @@ mod fish_completion_tests {
             index,
             is_user,
             is_dynamic,
-            path: PathBuf::from(format!("/d{index}/ji.fish")),
+            path: PathBuf::from(format!("/d{index}/dojo.fish")),
         }
     }
 
@@ -4303,15 +4298,15 @@ mod fish_completion_tests {
 
     #[test]
     fn is_dynamic_registration_pinned_to_real_bodies() {
-        assert!(is_dynamic_ji_registration(
+        assert!(is_dynamic_dojo_registration(
             &packaged_completion("fish").unwrap()
         ));
-        assert!(is_dynamic_ji_registration(
+        assert!(is_dynamic_dojo_registration(
             &render_fish_completion_body().unwrap()
         ));
-        assert!(!is_dynamic_ji_registration(&static_managed()));
-        // Mentions COMPLETE=fish but is not ji's callback → not a false positive.
-        assert!(!is_dynamic_ji_registration(
+        assert!(!is_dynamic_dojo_registration(&static_managed()));
+        // Mentions COMPLETE=fish but is not dojo's callback → not a false positive.
+        assert!(!is_dynamic_dojo_registration(
             "set -x COMPLETE=fish\n# unrelated\n"
         ));
     }
@@ -4322,7 +4317,7 @@ mod fish_completion_tests {
     fn decide_user_before_dynamic_vendor_shadows() {
         let facts = vec![fact(0, true, false), fact(1, false, true)];
         let s = fish_decide(&facts, Some(0), true);
-        assert_eq!(s.vendor_provider.as_deref(), Some(Path::new("/d1/ji.fish")));
+        assert_eq!(s.vendor_provider.as_deref(), Some(Path::new("/d1/dojo.fish")));
         assert!(s.user_shadows_vendor);
         assert!(s.blocking_non_user.is_none());
     }
@@ -4331,7 +4326,7 @@ mod fish_completion_tests {
     fn decide_dynamic_vendor_only_no_user() {
         let facts = vec![fact(1, false, true)];
         let s = fish_decide(&facts, Some(0), false);
-        assert_eq!(s.vendor_provider.as_deref(), Some(Path::new("/d1/ji.fish")));
+        assert_eq!(s.vendor_provider.as_deref(), Some(Path::new("/d1/dojo.fish")));
         assert!(!s.user_file_exists);
         assert!(!s.user_shadows_vendor);
     }
@@ -4357,7 +4352,7 @@ mod fish_completion_tests {
         assert!(s.vendor_provider.is_none());
         assert_eq!(
             s.blocking_non_user.as_deref(),
-            Some(Path::new("/d1/ji.fish"))
+            Some(Path::new("/d1/dojo.fish"))
         );
         assert!(!s.user_shadows_vendor);
     }
@@ -4370,16 +4365,16 @@ mod fish_completion_tests {
         let vendor = tmp.path().join("vendor");
         std::fs::create_dir_all(&user_dir).unwrap();
         // Dynamic content but unreadable → must be treated as a (non-dynamic) blocker.
-        write_file(&block_dir.join("ji.fish"), &dynamic_body());
+        write_file(&block_dir.join("dojo.fish"), &dynamic_body());
         std::fs::set_permissions(
-            block_dir.join("ji.fish"),
+            block_dir.join("dojo.fish"),
             std::fs::Permissions::from_mode(0o000),
         )
         .unwrap();
-        write_file(&vendor.join("ji.fish"), &dynamic_body());
+        write_file(&vendor.join("dojo.fish"), &dynamic_body());
         // Skip if the sandbox ignores perms (e.g. running as root) — the file
         // would then read as dynamic and the "unreadable" premise wouldn't hold.
-        if std::fs::read_to_string(block_dir.join("ji.fish")).is_ok() {
+        if std::fs::read_to_string(block_dir.join("dojo.fish")).is_ok() {
             return;
         }
         let path = vec![user_dir.clone(), block_dir.clone(), vendor];
@@ -4388,7 +4383,7 @@ mod fish_completion_tests {
         assert!(s.vendor_provider.is_none());
         assert_eq!(
             s.blocking_non_user.as_deref(),
-            Some(block_dir.join("ji.fish").as_path())
+            Some(block_dir.join("dojo.fish").as_path())
         );
     }
 
@@ -4404,7 +4399,7 @@ mod fish_completion_tests {
         let env = env_for(&tmp, FishProbeSource::Live);
         let user = user_completion_path(&env);
         let vendor = tmp.path().join("vendor");
-        write_file(&vendor.join("ji.fish"), &dynamic_body());
+        write_file(&vendor.join("dojo.fish"), &dynamic_body());
         write_file(&user, &static_managed());
         let env = ShellEnv {
             fish_complete_path: FishProbeSource::Probed(vec![
@@ -4418,7 +4413,7 @@ mod fish_completion_tests {
         assert_eq!(
             plan.fish_completion_mode,
             Some(FishCompletionMode::Vendor {
-                provider: vendor.join("ji.fish")
+                provider: vendor.join("dojo.fish")
             })
         );
         assert_eq!(plan.removals.len(), 1);
@@ -4438,7 +4433,7 @@ mod fish_completion_tests {
         let env = env_for(&tmp, FishProbeSource::Live);
         let user = user_completion_path(&env);
         let vendor = tmp.path().join("vendor");
-        write_file(&vendor.join("ji.fish"), &dynamic_body());
+        write_file(&vendor.join("dojo.fish"), &dynamic_body());
         let env = ShellEnv {
             fish_complete_path: FishProbeSource::Probed(vec![
                 user.parent().unwrap().to_path_buf(),
@@ -4466,8 +4461,8 @@ mod fish_completion_tests {
         let env = env_for(&tmp, FishProbeSource::Live);
         let user = user_completion_path(&env);
         let vendor = tmp.path().join("vendor");
-        write_file(&vendor.join("ji.fish"), &dynamic_body());
-        write_file(&user, "# hand authored, not ji-managed\n");
+        write_file(&vendor.join("dojo.fish"), &dynamic_body());
+        write_file(&user, "# hand authored, not dojo-managed\n");
         let env = ShellEnv {
             fish_complete_path: FishProbeSource::Probed(vec![
                 user.parent().unwrap().to_path_buf(),
@@ -4498,7 +4493,7 @@ mod fish_completion_tests {
             .iter()
             .find(|w| w.role == WriteRole::FishCompletions)
             .expect("completion write");
-        assert!(is_dynamic_ji_registration(&cw.after));
+        assert!(is_dynamic_dojo_registration(&cw.after));
         assert!(plan.removals.is_empty());
     }
 
@@ -4517,7 +4512,7 @@ mod fish_completion_tests {
             .iter()
             .find(|w| w.role == WriteRole::FishCompletions)
             .expect("completion write");
-        assert!(is_dynamic_ji_registration(&cw.after));
+        assert!(is_dynamic_dojo_registration(&cw.after));
         assert!(plan.removals.is_empty());
     }
 
@@ -4529,7 +4524,7 @@ mod fish_completion_tests {
         let err = plan_install_fish(&env, false, &mut Vec::new())
             .err()
             .unwrap();
-        assert!(format!("{err}").contains("not ji-managed"));
+        assert!(format!("{err}").contains("not dojo-managed"));
     }
 
     #[test]
@@ -4538,7 +4533,7 @@ mod fish_completion_tests {
         let env = env_for(&tmp, FishProbeSource::Live);
         let user = user_completion_path(&env);
         let vendor = tmp.path().join("vendor");
-        write_file(&vendor.join("ji.fish"), &dynamic_body());
+        write_file(&vendor.join("dojo.fish"), &dynamic_body());
         write_file(&user, &static_managed());
         let env = ShellEnv {
             fish_complete_path: FishProbeSource::Probed(vec![
@@ -4552,7 +4547,7 @@ mod fish_completion_tests {
         plan.show(&mut buf);
         let out = String::from_utf8(buf).unwrap();
         assert!(out.contains("- would delete"));
-        assert!(out.contains("completions/ji.fish"));
+        assert!(out.contains("completions/dojo.fish"));
     }
 
     // ---- installed_ok (plan-driven) ----
@@ -4572,7 +4567,7 @@ mod fish_completion_tests {
         let tmp = TempDir::new().unwrap();
         let env = env_for(&tmp, FishProbeSource::Live);
         write_file(&fish_primary(&env), &render_fish_wrapper_body());
-        let vendor_ji = tmp.path().join("vendor/ji.fish");
+        let vendor_ji = tmp.path().join("vendor/dojo.fish");
         write_file(&vendor_ji, &dynamic_body());
         let plan = fish_plan(
             FishCompletionMode::Vendor {
@@ -4588,9 +4583,9 @@ mod fish_completion_tests {
         let tmp = TempDir::new().unwrap();
         let env = env_for(&tmp, FishProbeSource::Live);
         write_file(&fish_primary(&env), &render_fish_wrapper_body());
-        let vendor_ji = tmp.path().join("vendor/ji.fish");
+        let vendor_ji = tmp.path().join("vendor/dojo.fish");
         write_file(&vendor_ji, &dynamic_body());
-        let leftover = tmp.path().join("leftover/ji.fish");
+        let leftover = tmp.path().join("leftover/dojo.fish");
         write_file(&leftover, &static_managed());
         let plan = fish_plan(
             FishCompletionMode::Vendor {
@@ -4636,33 +4631,33 @@ mod fish_completion_tests {
 
     #[test]
     fn status_lines_stale_managed_shadow_warns_with_install_fix() {
-        let s = scan(true, Some("/v/ji.fish"), None, true);
-        let lines = fish_completion_status_lines(&s, false, Path::new("/u/ji.fish"), "drift", true);
+        let s = scan(true, Some("/v/dojo.fish"), None, true);
+        let lines = fish_completion_status_lines(&s, false, Path::new("/u/dojo.fish"), "drift", true);
         assert!(
             lines
                 .iter()
                 .any(|l| l.contains("stale completion shadowing")
-                    && l.contains("ji config shell install fish"))
+                    && l.contains("dojo config shell install fish"))
         );
     }
 
     #[test]
     fn status_lines_nonmanaged_shadow_warns_with_force() {
-        let s = scan(true, Some("/v/ji.fish"), None, true);
+        let s = scan(true, Some("/v/dojo.fish"), None, true);
         let lines =
-            fish_completion_status_lines(&s, false, Path::new("/u/ji.fish"), "drift", false);
+            fish_completion_status_lines(&s, false, Path::new("/u/dojo.fish"), "drift", false);
         assert!(
             lines
                 .iter()
-                .any(|l| l.contains("not ji-managed") && l.contains("--force"))
+                .any(|l| l.contains("not dojo-managed") && l.contains("--force"))
         );
     }
 
     #[test]
     fn status_lines_inert_present_not_reported_as_shadow() {
-        let s = scan(true, Some("/v/ji.fish"), None, false);
+        let s = scan(true, Some("/v/dojo.fish"), None, false);
         let lines =
-            fish_completion_status_lines(&s, false, Path::new("/u/ji.fish"), "present", true);
+            fish_completion_status_lines(&s, false, Path::new("/u/dojo.fish"), "present", true);
         assert!(
             lines
                 .iter()
@@ -4674,18 +4669,18 @@ mod fish_completion_tests {
     #[test]
     fn status_lines_vendor_healthy_and_no_vendor_and_probe_failed() {
         let healthy = fish_completion_status_lines(
-            &scan(false, Some("/v/ji.fish"), None, false),
+            &scan(false, Some("/v/dojo.fish"), None, false),
             false,
-            Path::new("/u/ji.fish"),
+            Path::new("/u/dojo.fish"),
             "absent",
             false,
         );
-        assert!(healthy.iter().any(|l| l.contains("provided by /v/ji.fish")));
+        assert!(healthy.iter().any(|l| l.contains("provided by /v/dojo.fish")));
 
         let no_vendor = fish_completion_status_lines(
             &scan(true, None, None, false),
             false,
-            Path::new("/u/ji.fish"),
+            Path::new("/u/dojo.fish"),
             "present",
             true,
         );
@@ -4694,7 +4689,7 @@ mod fish_completion_tests {
         let failed = fish_completion_status_lines(
             &scan(true, None, None, false),
             true,
-            Path::new("/u/ji.fish"),
+            Path::new("/u/dojo.fish"),
             "drift",
             true,
         );
@@ -4703,13 +4698,13 @@ mod fish_completion_tests {
 
     #[test]
     fn status_lines_blocking_non_user_warns() {
-        let s = scan(false, None, Some("/early/ji.fish"), false);
+        let s = scan(false, None, Some("/early/dojo.fish"), false);
         let lines =
-            fish_completion_status_lines(&s, false, Path::new("/u/ji.fish"), "absent", false);
+            fish_completion_status_lines(&s, false, Path::new("/u/dojo.fish"), "absent", false);
         assert!(
             lines
                 .iter()
-                .any(|l| l.contains("/early/ji.fish")
+                .any(|l| l.contains("/early/dojo.fish")
                     && l.contains("earlier in $fish_complete_path"))
         );
     }
@@ -4720,7 +4715,7 @@ mod fish_completion_tests {
         let env = env_for(&tmp, FishProbeSource::Live);
         let user = fish_completions_path(&env);
         let vendor = tmp.path().join("vendor");
-        write_file(&vendor.join("ji.fish"), &dynamic_body());
+        write_file(&vendor.join("dojo.fish"), &dynamic_body());
         write_file(&user, &static_managed());
         write_file(&fish_primary(&env), &render_fish_wrapper_body());
         let env = ShellEnv {
@@ -4733,7 +4728,7 @@ mod fish_completion_tests {
         let mut buf = Vec::new();
         status_fish(&env, &mut buf).unwrap();
         let out = String::from_utf8(buf).unwrap();
-        assert!(out.contains(&vendor.join("ji.fish").display().to_string()));
-        assert!(out.contains("ji config shell install fish"));
+        assert!(out.contains(&vendor.join("dojo.fish").display().to_string()));
+        assert!(out.contains("dojo config shell install fish"));
     }
 }

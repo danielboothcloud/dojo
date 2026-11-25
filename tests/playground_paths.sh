@@ -8,7 +8,7 @@
 #
 # Usage: task playground:paths
 set -euo pipefail
-export JI_LOG=1
+export DOJO_LOG=1
 
 DIR="$(mktemp -d)"
 DIRECTIVE="$(mktemp)"
@@ -39,20 +39,20 @@ jj bookmark create main -r @-
 echo ""
 echo "=== Test 1: {{ home }} expansion ==="
 
-JI_DIRECTIVE_FILE="$DIRECTIVE" command ji init
-cat > .config/ji.toml << 'TOML'
-workspace-path = "{{ home }}/ji-test-workspaces/{{ repo }}.{{ bookmark }}"
+DOJO_DIRECTIVE_FILE="$DIRECTIVE" command dojo init
+cat > .config/dojo.toml << 'TOML'
+workspace-path = "{{ home }}/dojo-test-workspaces/{{ repo }}.{{ bookmark }}"
 TOML
 
-EXPECTED="$HOME/ji-test-workspaces/eg.test-home"
-JI_DIRECTIVE_FILE="$DIRECTIVE" command ji new test/home --revision main -m "test home"
+EXPECTED="$HOME/dojo-test-workspaces/eg.test-home"
+DOJO_DIRECTIVE_FILE="$DIRECTIVE" command dojo new test/home --revision main -m "test home"
 
 if [ -d "$EXPECTED" ]; then
     echo "  PASS: {{ home }} expanded to $HOME"
     # Clean up
     jj -R "$REPO" workspace forget test-home 2>/dev/null || true
     rm -rf "$EXPECTED"
-    rmdir "$HOME/ji-test-workspaces" 2>/dev/null || true
+    rmdir "$HOME/dojo-test-workspaces" 2>/dev/null || true
 else
     echo "  FAIL: expected $EXPECTED"
     find "$DIR" -type d -name "eg.*" 2>/dev/null || true
@@ -65,7 +65,7 @@ fi
 echo ""
 echo "=== Test 2: {{ default_workspace_path }} expansion ==="
 
-cat > .config/ji.toml << 'TOML'
+cat > .config/dojo.toml << 'TOML'
 workspace-path = "{{ default_workspace_path }}/../workspaces/{{ repo }}.{{ bookmark }}"
 TOML
 
@@ -74,7 +74,7 @@ EXPECTED="$REPO_ABS/../workspaces/eg.test-pwp"
 # Normalize
 EXPECTED="$(cd "$REPO_ABS/.." && pwd -P)/workspaces/eg.test-pwp"
 
-JI_DIRECTIVE_FILE="$DIRECTIVE" command ji new test/pwp --revision main -m "test pwp"
+DOJO_DIRECTIVE_FILE="$DIRECTIVE" command dojo new test/pwp --revision main -m "test pwp"
 
 if [ -d "$EXPECTED" ]; then
     echo "  PASS: {{ default_workspace_path }} expanded correctly"
@@ -92,11 +92,11 @@ fi
 echo ""
 echo "=== Test 3: unknown variable warning ==="
 
-cat > .config/ji.toml << 'TOML'
+cat > .config/dojo.toml << 'TOML'
 workspace-path = "../aaa/{{ bbb }}/workspaces/{{ repo }}.{{ bookmark }}"
 TOML
 
-JI_DIRECTIVE_FILE="$DIRECTIVE" command ji new test/unknown --revision main -m "test unknown" 2>"$STDERR_FILE" || true
+DOJO_DIRECTIVE_FILE="$DIRECTIVE" command dojo new test/unknown --revision main -m "test unknown" 2>"$STDERR_FILE" || true
 STDERR_OUTPUT="$(cat "$STDERR_FILE")"
 
 if echo "$STDERR_OUTPUT" | grep -q "unknown template variable"; then
@@ -117,11 +117,11 @@ jj -R "$REPO" workspace forget test-unknown 2>/dev/null || true
 echo ""
 echo "=== Test 4: malformed delimiter warning ==="
 
-cat > .config/ji.toml << 'TOML'
+cat > .config/dojo.toml << 'TOML'
 workspace-path = "{{home}}/workspaces/{{ repo }}.{{ bookmark }}"
 TOML
 
-JI_DIRECTIVE_FILE="$DIRECTIVE" command ji new test/malformed --revision main -m "test malformed" 2>"$STDERR_FILE" || true
+DOJO_DIRECTIVE_FILE="$DIRECTIVE" command dojo new test/malformed --revision main -m "test malformed" 2>"$STDERR_FILE" || true
 STDERR_OUTPUT="$(cat "$STDERR_FILE")"
 
 if echo "$STDERR_OUTPUT" | grep -q "malformed template variable"; then

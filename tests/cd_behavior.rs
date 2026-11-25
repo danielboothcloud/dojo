@@ -1,8 +1,8 @@
-//! Binary-level integration tests for `ji`'s parent-shell cd behavior.
+//! Binary-level integration tests for `dojo`'s parent-shell cd behavior.
 //!
-//! Each test runs the real `ji` binary (`CARGO_BIN_EXE_ji`) in a temp jj repo
+//! Each test runs the real `dojo` binary (`CARGO_BIN_EXE_dojo`) in a temp jj repo
 //! with an isolated shell env (HOME/XDG_CONFIG_HOME/ZDOTDIR/SHELL, null stdin,
-//! and a controlled `JI_DIRECTIVE_FILE`), so a developer's real installed
+//! and a controlled `DOJO_DIRECTIVE_FILE`), so a developer's real installed
 //! wrapper can't affect the result. These assert exit status / target path /
 //! quiet stderr / rescue wording — not the exact diagnosed reason (the
 //! process-tree walk sees the real ancestor shell), which is covered by the
@@ -72,11 +72,11 @@ impl Repo {
         }
     }
 
-    /// Run `ji` from `cwd` with isolated env. `directive` controls
-    /// `JI_DIRECTIVE_FILE`: `None` = unset, `Some(path)` = set (wrapper active),
+    /// Run `dojo` from `cwd` with isolated env. `directive` controls
+    /// `DOJO_DIRECTIVE_FILE`: `None` = unset, `Some(path)` = set (wrapper active),
     /// `Some("")` = empty.
     fn run(&self, cwd: &Path, args: &[&str], directive: Option<&str>) -> Output {
-        let mut c = Command::new(env!("CARGO_BIN_EXE_ji"));
+        let mut c = Command::new(env!("CARGO_BIN_EXE_dojo"));
         c.args(args)
             .current_dir(cwd)
             .stdin(Stdio::null()) // non-TTY → install never prompts/hangs
@@ -86,13 +86,13 @@ impl Repo {
             .env("SHELL", "/bin/zsh");
         match directive {
             None => {
-                c.env_remove("JI_DIRECTIVE_FILE");
+                c.env_remove("DOJO_DIRECTIVE_FILE");
             }
             Some(v) => {
-                c.env("JI_DIRECTIVE_FILE", v);
+                c.env("DOJO_DIRECTIVE_FILE", v);
             }
         }
-        c.output().expect("run ji")
+        c.output().expect("run dojo")
     }
 }
 
@@ -110,7 +110,7 @@ fn switch_unwrapped_exits_nonzero_with_clean_cd_note() {
     let o = r.run(&r.default_ws, &["switch", "feature"], None);
     let e = stderr(&o);
     assert!(!o.status.success(), "expected non-zero; stderr: {e}");
-    assert!(e.contains("(ji)::cd"), "missing cd note: {e}");
+    assert!(e.contains("(dojo)::cd"), "missing cd note: {e}");
     assert!(
         e.contains("feature"),
         "hint should name the target path: {e}"
@@ -161,7 +161,7 @@ fn new_unwrapped_exits_zero_with_hint() {
         stderr(&o)
     );
     assert!(
-        stderr(&o).contains("(ji)::cd"),
+        stderr(&o).contains("(dojo)::cd"),
         "expected a cd hint: {}",
         stderr(&o)
     );
@@ -173,10 +173,10 @@ fn empty_directive_on_switch_is_unavailable_nonzero() {
     let o = r.run(&r.default_ws, &["switch", "feature"], Some(""));
     assert!(
         !o.status.success(),
-        "empty JI_DIRECTIVE_FILE must not be a silent success; stderr: {}",
+        "empty DOJO_DIRECTIVE_FILE must not be a silent success; stderr: {}",
         stderr(&o)
     );
-    assert!(stderr(&o).contains("(ji)::cd"));
+    assert!(stderr(&o).contains("(dojo)::cd"));
 }
 
 #[test]
@@ -230,7 +230,7 @@ fn benign_close_keeps_dir_exits_zero_with_hint() {
         o.status.success(),
         "benign close should exit 0; stderr: {e}"
     );
-    assert!(e.contains("(ji)::cd"), "expected a cd hint: {e}");
+    assert!(e.contains("(dojo)::cd"), "expected a cd hint: {e}");
     assert!(
         r.feature_ws.exists(),
         "the workspace dir should survive a close without --delete-files"
@@ -246,7 +246,7 @@ fn install_with_yes_writes_without_prompt() {
         None,
     );
     assert!(o.status.success(), "stderr: {}", stderr(&o));
-    assert!(r.home.join(".config/ji/init.zsh").exists());
+    assert!(r.home.join(".config/dojo/init.zsh").exists());
 }
 
 #[test]
@@ -259,7 +259,7 @@ fn install_non_tty_does_not_hang_or_prompt() {
         stderr(&o)
     );
     // It wrote the managed file rather than waiting for input.
-    assert!(r.home.join(".config/ji/init.zsh").exists());
+    assert!(r.home.join(".config/dojo/init.zsh").exists());
 }
 
 #[test]
@@ -268,7 +268,7 @@ fn install_single_shell_output_is_stable() {
     let home = tmp.path();
     std::fs::write(home.join(".zshrc"), "").unwrap();
 
-    let o = Command::new(env!("CARGO_BIN_EXE_ji"))
+    let o = Command::new(env!("CARGO_BIN_EXE_dojo"))
         .args(["config", "shell", "install", "zsh", "--dry-run"])
         .current_dir(home)
         .stdin(Stdio::null())
@@ -276,13 +276,13 @@ fn install_single_shell_output_is_stable() {
         .env("XDG_CONFIG_HOME", home.join(".config"))
         .env("ZDOTDIR", home)
         .env("SHELL", "/bin/zsh")
-        .env_remove("JI_DIRECTIVE_FILE")
+        .env_remove("DOJO_DIRECTIVE_FILE")
         .output()
-        .expect("run ji");
+        .expect("run dojo");
 
     assert!(o.status.success(), "stderr: {}", stderr(&o));
     let s = stdout(&o);
     assert!(s.contains("--- "), "stdout: {s}");
     assert!(s.contains("+++ "), "stdout: {s}");
-    assert!(s.contains("# >>> ji shell integration >>>"), "stdout: {s}");
+    assert!(s.contains("# >>> dojo shell integration >>>"), "stdout: {s}");
 }

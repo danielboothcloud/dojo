@@ -6,7 +6,7 @@ use serde::{Deserialize, Serialize};
 /// Maximum persisted action records. Oldest entries are dropped when full.
 const MAX_RECORDS: usize = 50;
 
-/// A recorded ji action with pre/post jj operation IDs.
+/// A recorded dojo action with pre/post jj operation IDs.
 #[derive(Serialize, Deserialize)]
 pub struct ActionRecord {
     pub label: String,
@@ -23,9 +23,9 @@ struct PersistedHistory {
     records: Vec<ActionRecord>,
 }
 
-/// Undo/redo stack for ji compound actions, persisted across sessions.
+/// Undo/redo stack for dojo compound actions, persisted across sessions.
 ///
-/// Each ji action (sync, create, close, etc.) runs multiple jj commands.
+/// Each dojo action (sync, create, close, etc.) runs multiple jj commands.
 /// This records the jj op_head before and after, allowing undo/redo of the
 /// entire compound action as a single step via `jj op restore`.
 #[derive(Default)]
@@ -35,7 +35,7 @@ pub struct ActionHistory {
     /// `records[cursor..]` are redo-able.
     cursor: usize,
     /// The op head after the most recent mutation (record/undo/redo).
-    /// Used to detect if external jj work happened since the last ji action.
+    /// Used to detect if external jj work happened since the last dojo action.
     pub last_op_head: Option<String>,
 }
 

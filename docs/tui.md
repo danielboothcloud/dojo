@@ -1,22 +1,22 @@
 # TUI reference
 
-Launch with `ji` (no subcommand) from any directory inside a [jj](https://jj-vcs.github.io) repository.
+Launch with `dojo` (no subcommand) from any directory inside a [jj](https://jj-vcs.github.io) repository.
 
-The TUI is an interactive workspace browser: pick a workspace, inspect its revisions, and perform workspace-level operations without dropping to the shell. Everything it does is also available via `ji <subcommand>` — see [cli.md](cli.md).
+The TUI is an interactive workspace browser: pick a workspace, inspect its revisions, and perform workspace-level operations without dropping to the shell. Everything it does is also available via `dojo <subcommand>` — see [cli.md](cli.md).
 
 ## Terms used on this page
 
-- **Default workspace** — the workspace at the repository root (`default@`). It serves the role of the `main`/`master` branch in git. ji protects it from being closed or transferred from.
+- **Default workspace** — the workspace at the repository root (`default@`). It serves the role of the `main`/`master` branch in git. dojo protects it from being closed or transferred from.
 - **Stale workspace** — a workspace whose on-disk working copy no longer matches jj's recorded state, usually because another process (another shell, an editor, an agent) modified the repo underneath it.
 - **Orphaned workspace** — a workspace whose directory has been deleted on disk but whose entry remains in jj's workspace list.
-- **Singular bookmark** — the bookmark whose name matches the workspace's `{{ bookmark }}` template value. ji creates it on workspace creation and manages it automatically on close/transfer.
+- **Singular bookmark** — the bookmark whose name matches the workspace's `{{ bookmark }}` template value. dojo creates it on workspace creation and manages it automatically on close/transfer.
 
 ## Layout
 
 Two panes, side by side:
 
 - **Left pane** — the workspace list, with a sort indicator, an info panel, and the current workspace's path at the bottom. The info panel shows the selected workspace's description by default; press `i` to toggle to the changed-files view.
-- **Right pane** — the commit graph (from `jj log`, with ji's default or a custom `log-template`). Press `?` or `/` to replace the graph with the help pane.
+- **Right pane** — the commit graph (from `jj log`, with dojo's default or a custom `log-template`). Press `?` or `/` to replace the graph with the help pane.
 
 Focus is on either the workspace list or the graph pane. Press `Tab` to toggle; `Esc` returns focus from the graph to the list.
 
@@ -92,10 +92,10 @@ Orphaned workspaces (blue) are simply forgotten by `x` — no dialog.
 
 | Key | Action |
 |---|---|
-| `Z` | Undo the last ji action by running `jj op restore` to the pre-action op |
+| `Z` | Undo the last dojo action by running `jj op restore` to the pre-action op |
 | `Y` | Redo the most recently undone action |
 
-ji records its own actions in a persisted history (`.ji/action-history.json`) so that `Z`/`Y` only traverse ji-initiated operations, not every jj operation in the repo.
+dojo records its own actions in a persisted history (`.dojo/action-history.json`) so that `Z`/`Y` only traverse dojo-initiated operations, not every jj operation in the repo.
 
 ### Status line
 
@@ -140,7 +140,7 @@ Line-editing keys (inside any text field): `Ctrl+a` (start), `Ctrl+e` (end), `Ct
 
 Both open the same dialog. `x` opens it in close mode (the source workspace is forgotten after the operation); `t` opens it in transfer mode (both workspaces stay open). The dialog lists the operations available for the current sync state between source and target, along with a live preview of the jj command sequence that will run.
 
-The command preview is ji's honest statement of what the operation will do. If you are learning jj, reading (and `c`-copying) the preview is a reliable way to see how fast-forward / merge / rebase / squash map to sequences of `jj new`, `jj rebase`, and friends.
+The command preview is dojo's honest statement of what the operation will do. If you are learning jj, reading (and `c`-copying) the preview is a reliable way to see how fast-forward / merge / rebase / squash map to sequences of `jj new`, `jj rebase`, and friends.
 
 | Key | Action |
 |---|---|
@@ -204,33 +204,33 @@ Opens on `v`. Lets you pick a revision from the selected workspace's chain to sp
 | Key | Action |
 |---|---|
 | `↑` / `k`, `↓` / `j` | Navigate |
-| `Enter` | Confirm — ji temporarily drops out of the alternate screen, runs `jj split` on the chosen revision interactively, then returns to the TUI |
+| `Enter` | Confirm — dojo temporarily drops out of the alternate screen, runs `jj split` on the chosen revision interactively, then returns to the TUI |
 | `Esc` | Cancel without splitting |
 
-Because `jj split` prompts you to choose hunks, ji hands the terminal back to jj for the duration of the split. Your TUI state returns when the split finishes.
+Because `jj split` prompts you to choose hunks, dojo hands the terminal back to jj for the duration of the split. Your TUI state returns when the split finishes.
 
 ### Update stale
 
 Triggered by `u` on a stale workspace. Lets you inspect the pending working-copy changes before resolving the staleness with `jj workspace update-stale`.
 
-The diff is loaded on a background thread on demand — press `d` to start it. The diff is not loaded automatically because a stale workspace may have a large working copy, and ji does not want to block the TUI.
+The diff is loaded on a background thread on demand — press `d` to start it. The diff is not loaded automatically because a stale workspace may have a large working copy, and dojo does not want to block the TUI.
 
 | Key | Action |
 |---|---|
 | `d` | Start loading the diff (only if not already loaded or in progress) |
 | `↑` / `k`, `↓` / `j` | Scroll the diff |
-| `Enter` | Save the currently selected diff to `.ji/diffs/<name>-<change_id>.patch` |
-| `a` | Save all diffs to `.ji/diffs/` |
+| `Enter` | Save the currently selected diff to `.dojo/diffs/<name>-<change_id>.patch` |
+| `a` | Save all diffs to `.dojo/diffs/` |
 | `y` | Resolve staleness (calls `jj workspace update-stale`) |
 | `Esc` | Back to the list |
 
 ## Stale alert
 
-A modal that blocks the TUI when ji detects the *repo itself* is stale (op head moved under it).
+A modal that blocks the TUI when dojo detects the *repo itself* is stale (op head moved under it).
 
 | Key | Action |
 |---|---|
-| `r` | Save all stale diffs to `.ji/diffs/`, then call `jj workspace update-stale` |
+| `r` | Save all stale diffs to `.dojo/diffs/`, then call `jj workspace update-stale` |
 | `q` / `Esc` | Quit the TUI |
 
 Actions `n`, `s`, `t`, `x`, `v`, `b` all open the stale alert instead of their normal dialog while the repo is stale.
@@ -244,13 +244,13 @@ Press `o` to swap the left pane for the jj operation log. The graph pane continu
 | `↑` / `k`, `↓` / `j` | Navigate operations |
 | `s` | Toggle snapshot-op visibility |
 | `R` | Open the op-restore confirmation (restore to the selected operation) |
-| `Z` / `Y` | Undo / redo ji-initiated actions |
+| `Z` / `Y` | Undo / redo dojo-initiated actions |
 | `Tab` | Toggle focus to the graph |
 | `o` / `Esc` (list focus) | Close the op log pane |
 
 ## Config warning modal
 
-If `.config/ji.toml` has template warnings (unknown variables, malformed delimiters), pressing `n` (create) opens the `ConfigWarning` modal first. From the modal you can proceed to the Create dialog or back out. See [configuration.md](configuration.md#template-validation).
+If `.config/dojo.toml` has template warnings (unknown variables, malformed delimiters), pressing `n` (create) opens the `ConfigWarning` modal first. From the modal you can proceed to the Create dialog or back out. See [configuration.md](configuration.md#template-validation).
 
 ## Summary of dialogs
 

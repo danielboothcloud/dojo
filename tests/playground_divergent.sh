@@ -2,7 +2,7 @@
 # Scaffolds a jj repo containing divergent revisions for manual TUI testing.
 # Usage: task playground:divergence
 set -euo pipefail
-export JI_LOG=1
+export DOJO_LOG=1
 
 DIR="$(mktemp -d)"
 
