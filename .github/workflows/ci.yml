@@ -2,7 +2,7 @@ name: CI
 
 on:
   push:
-    branches: [main]
+    branches: [main, develop]
   pull_request:
 
 permissions:
@@ -18,61 +18,117 @@ env:
 
 jobs:
   test:
-    name: build + lint + test + deny
-    runs-on: macos-15
+    name: test (${{ matrix.os }}, jj ${{ matrix.jj }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # Latest jj release from GitHub.
+          - os: ubuntu-latest
+            jj: latest
+          # The jj version of the Sundae sandbox image (mise.toml: jj = "0.47").
+          - os: ubuntu-latest
+            jj: 0.47.1
+          # macOS: jj from Homebrew.
+          - os: macos-15
+            jj: brew
     steps:
       - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
         with:
           components: clippy, rustfmt
 
-      # Cache restore BEFORE the `cargo install` steps so cold-run installs
-      # of cargo-deny / cargo-machete are pulled from the cargo registry
-      # cache instead of being re-downloaded every CI run.
-      - name: Cache cargo registry & target
-        uses: actions/cache@v5
-        with:
-          path: |
-            ~/.cargo/registry
-            ~/.cargo/git
-            ~/.cargo/bin
-            target
-          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
-          restore-keys: |
-            ${{ runner.os }}-cargo-
+      - name: Cache cargo registry and target
+        uses: Swatinem/rust-cache@v2
 
-      - name: Install jj
+      - name: Install jj (GitHub release tarball)
+        if: runner.os == 'Linux'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          JJ_VERSION: ${{ matrix.jj }}
+        run: |
+          if [ "$JJ_VERSION" = latest ]; then
+            tag=$(gh release view --repo jj-vcs/jj --json tagName --jq .tagName)
+          else
+            tag="v$JJ_VERSION"
+          fi
+          url="https://github.com/jj-vcs/jj/releases/download/$tag/jj-$tag-x86_64-unknown-linux-musl.tar.gz"
+          mkdir -p "$HOME/.local/bin"
+          curl -fsSL "$url" | tar -xz -C "$HOME/.local/bin" ./jj
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+          "$HOME/.local/bin/jj" --version
+
+      - name: Install jj (Homebrew)
+        if: runner.os == 'macOS'
         # `brew update` first: the runner image ships a pinned Homebrew formula
-        # snapshot (auto-update off) that can predate the latest jj. Without the
-        # refresh, `brew install` pours a stale bottle below the required
-        # MIN_JJ_VERSION (src/jujutsu.rs) and the integration tests fail.
+        # snapshot that can predate the latest jj (below MIN_JJ_VERSION in
+        # src/jujutsu/mod.rs).
         run: |
           brew update
           brew install jj
           jj --version
 
-      - name: Install go-task
-        run: brew install go-task
+      - name: Format
+        run: cargo fmt --all -- --check
 
-      - name: Install cargo-deny
-        run: cargo install --locked --force cargo-deny
-
-      - name: Install cargo-machete
-        run: cargo install --locked --force cargo-machete
+      - name: Clippy
+        run: cargo clippy --all-targets --locked -- -D warnings
 
       - name: Build
-        run: cargo build --release --locked
-
-      - name: Lint (clippy + fmt-check)
-        run: task lint
+        run: cargo build --locked
 
       - name: Test
-        run: task test
+        run: cargo test --locked
 
+  audit:
+    name: deny + machete
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-deny,cargo-machete
       - name: Supply-chain audit (cargo-deny)
         run: cargo deny check
-
       - name: Unused-dependency check (cargo-machete)
         run: cargo machete
+
+  musl:
+    name: static musl build (${{ matrix.target }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        target: [x86_64-unknown-linux-musl, aarch64-unknown-linux-musl]
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: ${{ matrix.target }}
+      - uses: mlugg/setup-zig@v2
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-zigbuild
+      - name: Build
+        run: cargo zigbuild --release --locked --target ${{ matrix.target }}
+      - name: Check that the binary is static
+        run: |
+          bin=target/${{ matrix.target }}/release/dojo
+          file "$bin"
+          file "$bin" | grep -Eq 'statically linked|static-pie linked'
+      - name: Smoke test (x86_64 only)
+        if: matrix.target == 'x86_64-unknown-linux-musl'
+        run: target/${{ matrix.target }}/release/dojo --version

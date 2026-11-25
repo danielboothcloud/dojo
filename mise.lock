@@ -57,3 +57,4 @@ specifiers = ["stable"]
 [tools.rust.options]
 components = "clippy,rustfmt"
 profile = "minimal"
+targets = "x86_64-unknown-linux-musl"
