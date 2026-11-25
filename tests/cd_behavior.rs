@@ -107,7 +107,7 @@ fn stdout(o: &Output) -> String {
 #[test]
 fn switch_unwrapped_exits_nonzero_with_clean_cd_note() {
     let r = Repo::new();
-    let o = r.run(&r.default_ws, &["switch", "feature"], None);
+    let o = r.run(&r.default_ws, &["ws", "switch", "feature"], None);
     let e = stderr(&o);
     assert!(!o.status.success(), "expected non-zero; stderr: {e}");
     assert!(e.contains("(dojo)::cd"), "missing cd note: {e}");
@@ -127,7 +127,7 @@ fn switch_wrapped_writes_cd_directive() {
     let directive = r.home.join("directive");
     let o = r.run(
         &r.default_ws,
-        &["switch", "feature"],
+        &["ws", "switch", "feature"],
         Some(directive.to_str().unwrap()),
     );
     assert!(o.status.success(), "expected 0; stderr: {}", stderr(&o));
@@ -148,6 +148,7 @@ fn new_unwrapped_exits_zero_with_hint() {
     let o = r.run(
         &r.default_ws,
         &[
+            "ws",
             "new",
             "scratch",
             "--path",
@@ -170,7 +171,7 @@ fn new_unwrapped_exits_zero_with_hint() {
 #[test]
 fn empty_directive_on_switch_is_unavailable_nonzero() {
     let r = Repo::new();
-    let o = r.run(&r.default_ws, &["switch", "feature"], Some(""));
+    let o = r.run(&r.default_ws, &["ws", "switch", "feature"], Some(""));
     assert!(
         !o.status.success(),
         "empty DOJO_DIRECTIVE_FILE must not be a silent success; stderr: {}",
@@ -183,7 +184,7 @@ fn empty_directive_on_switch_is_unavailable_nonzero() {
 fn close_default_is_refused() {
     let r = Repo::new();
     // From the default workspace, source resolves to the cwd (default) → refused.
-    let o = r.run(&r.default_ws, &["close", "feature"], None);
+    let o = r.run(&r.default_ws, &["ws", "close", "feature"], None);
     let e = stderr(&o);
     assert!(
         !o.status.success(),
@@ -204,7 +205,11 @@ fn close_default_is_refused() {
 fn rescue_when_current_workspace_deleted() {
     let r = Repo::new();
     // Standing in the feature workspace, close it into default and delete its files.
-    let o = r.run(&r.feature_ws, &["close", "--delete-files", "default"], None);
+    let o = r.run(
+        &r.feature_ws,
+        &["ws", "close", "--delete-files", "default"],
+        None,
+    );
     let e = stderr(&o);
     assert!(
         !o.status.success(),
@@ -224,7 +229,7 @@ fn rescue_when_current_workspace_deleted() {
 fn benign_close_keeps_dir_exits_zero_with_hint() {
     let r = Repo::new();
     // Close feature into default without --delete-files: the dir survives → benign.
-    let o = r.run(&r.feature_ws, &["close", "default"], None);
+    let o = r.run(&r.feature_ws, &["ws", "close", "default"], None);
     let e = stderr(&o);
     assert!(
         o.status.success(),
@@ -284,5 +289,8 @@ fn install_single_shell_output_is_stable() {
     let s = stdout(&o);
     assert!(s.contains("--- "), "stdout: {s}");
     assert!(s.contains("+++ "), "stdout: {s}");
-    assert!(s.contains("# >>> dojo shell integration >>>"), "stdout: {s}");
+    assert!(
+        s.contains("# >>> dojo shell integration >>>"),
+        "stdout: {s}"
+    );
 }

@@ -164,10 +164,7 @@ fn suggest(
             "this bookmark is protected; push your work under a new name",
         );
     }
-    let upstream = r
-        .remotes
-        .iter()
-        .find(|x| x.remote == ctx.remotes.upstream);
+    let upstream = r.remotes.iter().find(|x| x.remote == ctx.remotes.upstream);
     if upstream.is_some_and(|u| u.behind.unwrap_or(0) > 0) {
         return s(
             format!("dojo sync {b}"),

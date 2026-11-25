@@ -215,7 +215,10 @@ fn push_inner(ctx: &Ctx, runner: &mut Runner<'_>, opts: &PushOptions) -> Result<
             (None, Some(b)) if opts.bookmark.is_some() => bookmarks::symbol(b),
             _ => target_rev.to_string(),
         };
-        if rows.iter().any(|r| r.name == *new_name && r.local.is_some()) {
+        if rows
+            .iter()
+            .any(|r| r.name == *new_name && r.local.is_some())
+        {
             bail!("bookmark {new_name} already exists; choose another name");
         }
         if ctx.is_protected(new_name) {
@@ -266,9 +269,7 @@ fn push_inner(ctx: &Ctx, runner: &mut Runner<'_>, opts: &PushOptions) -> Result<
     let row = rows.iter().find(|r| r.name == name);
     let local = row.and_then(|r| r.local.as_ref());
     if local.is_some_and(|l| l.conflict) {
-        bail!(
-            "bookmark {name} is conflicted. Fix it first with: dojo sync {name}"
-        );
+        bail!("bookmark {name} is conflicted. Fix it first with: dojo sync {name}");
     }
 
     // Where the bookmark will point, and whether dojo moves it forward.
@@ -384,10 +385,7 @@ fn describe_if_needed(
     }
     if opts.message.is_some() || opts.auto_describe {
         for c in &missing {
-            let msg = opts
-                .message
-                .clone()
-                .unwrap_or_else(|| default_message(c));
+            let msg = opts.message.clone().unwrap_or_else(|| default_message(c));
             runner.run_ok(Step::jj(
                 &["describe", &c.short_id, "--message", &msg],
                 "give the change a description (jj refuses to push without one)",
@@ -397,7 +395,12 @@ fn describe_if_needed(
     }
     let fixes: Vec<String> = missing
         .iter()
-        .map(|c| format!("  jj describe -r {} -m \"what this change does\"", c.short_id))
+        .map(|c| {
+            format!(
+                "  jj describe -r {} -m \"what this change does\"",
+                c.short_id
+            )
+        })
         .collect();
     bail!(
         "jj does not push changes {NO_DESCRIPTION}. Describe them first:\n{}\nOr run: dojo push -m \"what this change does\"",

@@ -187,7 +187,11 @@ pub fn render(report: &SwitchReport) -> String {
         ));
         return out;
     }
-    let verb = if report.dry_run { "Would switch" } else { "Switched" };
+    let verb = if report.dry_run {
+        "Would switch"
+    } else {
+        "Switched"
+    };
     out.push_str(&format!(
         "{verb} to {}: your working copy is a new change on top of it.\n",
         report.bookmark

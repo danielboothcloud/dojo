@@ -607,7 +607,11 @@ fn fish_install_writes_functions_wrapper_and_completions() {
     let tmp = TempDir::new().unwrap();
     let env = env_for(&tmp);
     install(&env, "fish", InstallOpts::default()).unwrap();
-    assert!(env.xdg_config_home.join("fish/functions/dojo.fish").exists());
+    assert!(
+        env.xdg_config_home
+            .join("fish/functions/dojo.fish")
+            .exists()
+    );
     assert!(
         env.xdg_config_home
             .join("fish/completions/dojo.fish")
@@ -676,7 +680,11 @@ fn fish_install_vendor_present_removes_stale_user_completion() {
         !comp.exists(),
         "stale shadowing user completion should be removed"
     );
-    assert!(env.xdg_config_home.join("fish/functions/dojo.fish").exists());
+    assert!(
+        env.xdg_config_home
+            .join("fish/functions/dojo.fish")
+            .exists()
+    );
 }
 
 #[test]

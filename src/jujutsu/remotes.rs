@@ -101,9 +101,7 @@ pub fn roles(
     upstream_override: Option<&str>,
 ) -> Result<RemoteRoles> {
     if remotes.is_empty() {
-        bail!(
-            "this repo has no git remotes. Add one with: jj git remote add origin <url>"
-        );
+        bail!("this repo has no git remotes. Add one with: jj git remote add origin <url>");
     }
     let has = |n: &str| remotes.iter().any(|r| r.name == n);
     let sundae = has(SUNDAE);
@@ -254,7 +252,11 @@ mod tests {
     fn forge_detection() {
         assert_eq!(
             forge_of_url("https://github.com/danielboothcloud/dojo.git"),
-            Some((Forge::GitHub, "github.com".into(), "danielboothcloud/dojo".into()))
+            Some((
+                Forge::GitHub,
+                "github.com".into(),
+                "danielboothcloud/dojo".into()
+            ))
         );
         assert_eq!(
             forge_of_url("git@gitlab.com:group/sub/proj.git"),

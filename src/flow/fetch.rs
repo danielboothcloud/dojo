@@ -104,9 +104,9 @@ pub fn diff(
             (Some(o), Some(n)) if !o.conflict && n.conflict => {
                 Some((ChangeKind::Conflicted, o.commit_id.clone(), None))
             }
-            (Some(o), Some(n)) if o.commit_id != n.commit_id || o.conflict != n.conflict => Some(
-                (ChangeKind::Moved, o.commit_id.clone(), n.commit_id.clone()),
-            ),
+            (Some(o), Some(n)) if o.commit_id != n.commit_id || o.conflict != n.conflict => {
+                Some((ChangeKind::Moved, o.commit_id.clone(), n.commit_id.clone()))
+            }
             _ => None,
         };
         let Some((kind, old_commit, new_commit)) = change else {
@@ -163,8 +163,16 @@ mod tests {
         assert_eq!(by_remote["origin"][0].new_commit.as_deref(), Some("3"));
         let sundae = &by_remote["sundae"];
         assert_eq!(sundae.len(), 2);
-        assert!(sundae.iter().any(|c| c.kind == ChangeKind::Deleted && c.name == "gone"));
-        assert!(sundae.iter().any(|c| c.kind == ChangeKind::New && c.name == "new"));
+        assert!(
+            sundae
+                .iter()
+                .any(|c| c.kind == ChangeKind::Deleted && c.name == "gone")
+        );
+        assert!(
+            sundae
+                .iter()
+                .any(|c| c.kind == ChangeKind::New && c.name == "new")
+        );
         assert_eq!(local[0].kind, ChangeKind::Conflicted);
     }
 }

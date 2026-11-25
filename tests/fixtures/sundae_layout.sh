@@ -128,6 +128,10 @@ jj git clone --quiet --colocate "$root/forge.git" work 2>/dev/null
     git remote set-url --push origin file:///sundae-forwards-pushes/use-jj-git-push-to-sundae
     jj git remote add sundae "$root/sundae.git"
     jj git fetch --remote sundae --quiet 2>/dev/null || jj git fetch --remote sundae
+    # Like a Sundae shell: NO per-repo jj config (no git.push / git.fetch,
+    # not even the trunk() alias that `jj git clone` writes).
+    repo_config=$(jj config path --repo 2>/dev/null || true)
+    [ -n "$repo_config" ] && rm -f "$repo_config"
     # Private files: excluded and never seen by jj status.
     printf '%s\n' AGENTS.md .pi/ >> .git/info/exclude
     echo "agent notes" > AGENTS.md

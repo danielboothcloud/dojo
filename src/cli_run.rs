@@ -97,7 +97,6 @@ fn check_identity(ctx: &Ctx, opts: Opts) {
         .or_else(|| ask("Your name for commits (empty to skip): "));
     let email = id
         .email
-        
         .or_else(|| ask("Your email for commits (empty to skip): "));
     let (Some(name), Some(email)) = (name, email) else {
         return;

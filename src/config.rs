@@ -135,8 +135,8 @@ fn read_table(path: &Path) -> Result<Option<toml::Table>> {
     }
     let contents = std::fs::read_to_string(path)
         .with_context(|| format!("failed to read {}", path.display()))?;
-    let table: toml::Table = toml::from_str(&contents)
-        .with_context(|| format!("invalid TOML in {}", path.display()))?;
+    let table: toml::Table =
+        toml::from_str(&contents).with_context(|| format!("invalid TOML in {}", path.display()))?;
     Ok(Some(table))
 }
 

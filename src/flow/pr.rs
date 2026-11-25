@@ -70,8 +70,11 @@ pub fn pr_step(
     match (program, opts.checks) {
         (Program::Gh, false) => {
             args.extend(
-                ["pr", "create", "--repo", repo, "--head", bookmark, "--title", title, "--body", body]
-                    .map(String::from),
+                [
+                    "pr", "create", "--repo", repo, "--head", bookmark, "--title", title, "--body",
+                    body,
+                ]
+                .map(String::from),
             );
             if let Some(b) = &opts.base {
                 args.extend(["--base".to_string(), b.clone()]);
@@ -150,8 +153,9 @@ pub fn pr(ctx: &Ctx, runner: &mut Runner<'_>, opts: &PrOptions) -> Result<PrRepo
     let (forge, program, repo) = forge_target(ctx)?;
     let bookmark = match &opts.bookmark {
         Some(b) => b.clone(),
-        None => push::current_bookmark(ctx)?
-            .ok_or_else(|| anyhow::anyhow!("no bookmark on @ or @-. Push your work first: dojo push"))?,
+        None => push::current_bookmark(ctx)?.ok_or_else(|| {
+            anyhow::anyhow!("no bookmark on @ or @-. Push your work first: dojo push")
+        })?,
     };
     if find_on_path(program.name()).is_none() && !runner.dry_run {
         bail!(
@@ -234,7 +238,10 @@ mod tests {
                 ..PrOptions::default()
             },
         );
-        assert!(s.command.starts_with("glab mr create --repo g/p --source-branch fix/goals"));
+        assert!(
+            s.command
+                .starts_with("glab mr create --repo g/p --source-branch fix/goals")
+        );
         assert!(s.command.ends_with("--yes --target-branch main"));
     }
 

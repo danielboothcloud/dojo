@@ -44,7 +44,10 @@ pub fn new_branch(
         bail!("invalid bookmark name '{}': use no spaces", opts.name);
     }
     if ctx.is_protected(name) {
-        bail!("{name} is protected on {}; choose another name", ctx.remotes.push);
+        bail!(
+            "{name} is protected on {}; choose another name",
+            ctx.remotes.push
+        );
     }
     let rows = ctx.bookmark_rows()?;
     if let Some(row) = rows.iter().find(|r| r.name == name) {
@@ -53,14 +56,20 @@ pub fn new_branch(
         }
         bail!("{name} already exists on the remote. Work on it with: dojo switch {name}");
     }
-    let from = opts.from.clone().unwrap_or_else(|| DEFAULT_FROM.to_string());
+    let from = opts
+        .from
+        .clone()
+        .unwrap_or_else(|| DEFAULT_FROM.to_string());
 
     let mut args: Vec<String> = vec!["new".into(), from.clone()];
     if let Some(m) = &opts.message {
         args.push("--message".into());
         args.push(m.clone());
     }
-    runner.run_ok(Step::jj(&args, format!("start a new change on top of {from}")))?;
+    runner.run_ok(Step::jj(
+        &args,
+        format!("start a new change on top of {from}"),
+    ))?;
 
     let change_id = if runner.dry_run {
         None
@@ -78,7 +87,9 @@ pub fn new_branch(
             ],
             format!("name the new change {name}"),
         ))?;
-        format!("Created bookmark {name} on a new change on top of {from}. Edit files, then run: dojo push")
+        format!(
+            "Created bookmark {name} on a new change on top of {from}. Edit files, then run: dojo push"
+        )
     } else {
         if let Some(id) = &change_id {
             pending::add(&ctx.root, name, id)?;

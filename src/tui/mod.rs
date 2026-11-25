@@ -1,11 +1,11 @@
 mod bookmarks_dialog;
-pub mod home;
 mod cmd_spans;
 mod copy_dialog;
 mod create_dialog;
 mod dialog_common;
 mod dialog_info;
 mod graph_pane;
+pub mod home;
 mod key_hints;
 mod line_edit;
 mod op_log_pane;
@@ -1134,11 +1134,11 @@ impl App {
                 // movement can include a forget/re-add that relocates a
                 // workspace — verify both paths by name before deferring.
                 let paths_ok = jujutsu::list_workspaces(&self.repo_root).is_ok_and(|wss| {
-                        let path_of =
-                            |n: &str| wss.iter().find(|w| w.name == n).map(|w| w.path.clone());
-                        path_of(&src_name).as_deref() == Some(src_path.as_path())
-                            && path_of(&target.name).as_deref() == Some(target.path.as_path())
-                    });
+                    let path_of =
+                        |n: &str| wss.iter().find(|w| w.name == n).map(|w| w.path.clone());
+                    path_of(&src_name).as_deref() == Some(src_path.as_path())
+                        && path_of(&target.name).as_deref() == Some(target.path.as_path())
+                });
                 if paths_ok {
                     if let Some(d) = &mut self.sync_dialog {
                         d.set_sync_info(*fresh);
@@ -3284,14 +3284,14 @@ impl App {
 // Non-interactive CLI commands (exit after execution)
 // ===========================================================================
 
-/// Non-interactive workspace switch (used by `dojo switch <target>`).
+/// Non-interactive workspace switch (used by `dojo ws switch <target>`).
 pub fn switch(target: &str) -> Result<()> {
     let repo_root = jujutsu::workspace_root()?;
     let ws_path = commands::switch::switch(&repo_root, target)?;
     shell::apply_switch_cd(&ws_path)
 }
 
-/// Non-interactive create-or-switch (used by `dojo new <target> --create-if-necessary`).
+/// Non-interactive create-or-switch (used by `dojo ws new <target> --create-if-necessary`).
 pub fn create_or_switch(
     target: &str,
     revision: Option<&str>,
@@ -3314,7 +3314,7 @@ pub fn create_or_switch(
     }
 }
 
-/// Non-interactive workspace creation (used by `dojo new`).
+/// Non-interactive workspace creation (used by `dojo ws new`).
 pub fn create(
     bookmark: &str,
     revision: Option<&str>,

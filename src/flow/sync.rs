@@ -113,7 +113,9 @@ pub fn sync(ctx: &Ctx, runner: &mut Runner<'_>, name: &str) -> Result<SyncReport
 
     // Your work on top of the bookmark (the working copy and its ancestors
     // after the bookmark) must move too, so rebase from @ when @ is on it.
-    let work_on_top = ctx.count(&format!("({ours}::@) ~ {ours} ~ (empty() & description(exact:\"\"))")) > 0;
+    let work_on_top = ctx.count(&format!(
+        "({ours}::@) ~ {ours} ~ (empty() & description(exact:\"\"))"
+    )) > 0;
     let at_on_bookmark = ctx.count(&format!("{ours} & ::@")) > 0;
     let wc_contains_upstream = ctx.count(&format!("{up_commit} & ::@")) > 0;
 

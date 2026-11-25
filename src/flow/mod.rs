@@ -283,13 +283,24 @@ pub struct Offer {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[serde(tag = "kind", rename_all = "kebab-case")]
 pub enum OfferAction {
-    Sync { bookmark: String },
-    Push { bookmark: Option<String> },
+    Sync {
+        bookmark: String,
+    },
+    Push {
+        bookmark: Option<String>,
+    },
     /// `jj git push -c <rev>` (creates a `push-*` bookmark).
-    PushChange { rev: String },
+    PushChange {
+        rev: String,
+    },
     /// Push the same change under a new bookmark name.
-    PushAs { rev: String, name: Option<String> },
-    Pr { bookmark: String },
+    PushAs {
+        rev: String,
+        name: Option<String>,
+    },
+    Pr {
+        bookmark: String,
+    },
 }
 
 /// Short form of a full id for messages.

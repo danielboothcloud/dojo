@@ -50,7 +50,11 @@ fn gen_completions() -> Result<()> {
     // Dynamic registrations shared with `dojo config shell install` (via
     // dojo::shell::packaged_completion), so packaged completions are dynamic, not
     // stale static. Filenames match the Homebrew formula's install lines.
-    for (shell, file) in [("bash", "dojo.bash"), ("zsh", "_dojo"), ("fish", "dojo.fish")] {
+    for (shell, file) in [
+        ("bash", "dojo.bash"),
+        ("zsh", "_dojo"),
+        ("fish", "dojo.fish"),
+    ] {
         let body = dojo::shell::packaged_completion(shell)
             .with_context(|| format!("generating {shell} completion"))?;
         let path = dir.join(file);

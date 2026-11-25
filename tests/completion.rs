@@ -33,12 +33,12 @@ impl Shell {
         match self {
             Self::Zsh => {
                 command
-                    .env("_CLAP_COMPLETE_INDEX", "2")
+                    .env("_CLAP_COMPLETE_INDEX", "3")
                     .env("_CLAP_IFS", "\n");
             }
             Self::Bash => {
                 command
-                    .env("_CLAP_COMPLETE_INDEX", "2")
+                    .env("_CLAP_COMPLETE_INDEX", "3")
                     .env("_CLAP_COMPLETE_COMP_TYPE", "9")
                     .env("_CLAP_COMPLETE_SPACE", "false")
                     .env("_CLAP_IFS", "\u{b}");
@@ -157,7 +157,7 @@ impl CompletionRepo {
         }
         shell.configure(&mut command);
         command
-            .args(["--", "dojo", "switch", ""])
+            .args(["--", "dojo", "ws", "switch", ""])
             .env_remove("DOJO_DIRECTIVE_FILE")
             .stdin(Stdio::null())
             .output()

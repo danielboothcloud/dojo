@@ -764,7 +764,7 @@ pub fn apply_switch_cd(path: &Path) -> Result<()> {
     perform_cd(decide_cd(&request_cd(path)?, Policy::Switch), path)
 }
 
-/// (2) Follow-up cd: op succeeded, shell dir still valid (CLI `dojo new`). A
+/// (2) Follow-up cd: op succeeded, shell dir still valid (CLI `dojo ws new`). A
 /// wrapper-inactive cannot-cd prints the note and exits 0; a genuine directive
 /// I/O error still propagates (don't swallow disk/permission failures).
 pub fn apply_followup_cd(path: &Path) -> Result<()> {
@@ -1907,7 +1907,8 @@ fn fish_collect_providers(
             continue;
         }
         // Unreadable → not dynamic (a blocker), never skipped.
-        let is_dynamic = std::fs::read_to_string(&dojo).is_ok_and(|c| is_dynamic_dojo_registration(&c));
+        let is_dynamic =
+            std::fs::read_to_string(&dojo).is_ok_and(|c| is_dynamic_dojo_registration(&c));
         facts.push(ProviderFact {
             index,
             is_user,
@@ -2313,7 +2314,8 @@ fn installed_ok(env: &ShellEnv, plan: &ShellInstallPlan) -> bool {
                 // is exactly "no shadowing user file remains"; an intentionally
                 // inert non-shadowing file may remain.
                 Some(FishCompletionMode::Vendor { provider }) => {
-                    std::fs::read_to_string(provider).is_ok_and(|c| is_dynamic_dojo_registration(&c))
+                    std::fs::read_to_string(provider)
+                        .is_ok_and(|c| is_dynamic_dojo_registration(&c))
                         && plan.removals.iter().all(|r| !r.path.exists())
                 }
                 None => false,
@@ -2977,7 +2979,10 @@ fn apply_plan(plan: &ShellInstallPlan) -> Result<()> {
                 w.path.display()
             ),
             (WriteRole::FishCompletions, WriteOutcome::Created) => {
-                eprintln!("(dojo)::shell completions installed in {}", w.path.display());
+                eprintln!(
+                    "(dojo)::shell completions installed in {}",
+                    w.path.display()
+                );
             }
             (WriteRole::FishCompletions, WriteOutcome::Updated) => {
                 eprintln!("(dojo)::shell completions updated in {}", w.path.display());
@@ -3693,7 +3698,12 @@ mod detection_tests {
         // sudo -> env -> fish.
         let (d, _) = walk(
             10,
-            &[(10, 9, "dojo"), (9, 8, "sudo"), (8, 7, "env"), (7, 6, "fish")],
+            &[
+                (10, 9, "dojo"),
+                (9, 8, "sudo"),
+                (8, 7, "env"),
+                (7, 6, "fish"),
+            ],
         );
         assert_eq!(d, Detection::Supported("fish".into()));
     }
@@ -3715,7 +3725,10 @@ mod detection_tests {
     #[test]
     fn no_shell_chain_terminating_at_init_is_unknown() {
         // ppid 1 stops the walk; no recognized shell seen.
-        let (d, exe) = walk(100, &[(100, 50, "dojo"), (50, 40, "make"), (40, 1, "login")]);
+        let (d, exe) = walk(
+            100,
+            &[(100, 50, "dojo"), (50, 40, "make"), (40, 1, "login")],
+        );
         assert_eq!(d, Detection::Unknown);
         assert_eq!(exe, None);
     }
@@ -3751,7 +3764,10 @@ mod detection_tests {
     #[test]
     fn cycle_is_bounded() {
         // 50 <-> 60 cycle, all non-shells: the depth cap terminates the walk.
-        let (d, _) = walk(100, &[(100, 50, "dojo"), (50, 60, "make"), (60, 50, "make")]);
+        let (d, _) = walk(
+            100,
+            &[(100, 50, "dojo"), (50, 60, "make"), (60, 50, "make")],
+        );
         assert_eq!(d, Detection::Unknown);
     }
 
@@ -4317,7 +4333,10 @@ mod fish_completion_tests {
     fn decide_user_before_dynamic_vendor_shadows() {
         let facts = vec![fact(0, true, false), fact(1, false, true)];
         let s = fish_decide(&facts, Some(0), true);
-        assert_eq!(s.vendor_provider.as_deref(), Some(Path::new("/d1/dojo.fish")));
+        assert_eq!(
+            s.vendor_provider.as_deref(),
+            Some(Path::new("/d1/dojo.fish"))
+        );
         assert!(s.user_shadows_vendor);
         assert!(s.blocking_non_user.is_none());
     }
@@ -4326,7 +4345,10 @@ mod fish_completion_tests {
     fn decide_dynamic_vendor_only_no_user() {
         let facts = vec![fact(1, false, true)];
         let s = fish_decide(&facts, Some(0), false);
-        assert_eq!(s.vendor_provider.as_deref(), Some(Path::new("/d1/dojo.fish")));
+        assert_eq!(
+            s.vendor_provider.as_deref(),
+            Some(Path::new("/d1/dojo.fish"))
+        );
         assert!(!s.user_file_exists);
         assert!(!s.user_shadows_vendor);
     }
@@ -4632,7 +4654,8 @@ mod fish_completion_tests {
     #[test]
     fn status_lines_stale_managed_shadow_warns_with_install_fix() {
         let s = scan(true, Some("/v/dojo.fish"), None, true);
-        let lines = fish_completion_status_lines(&s, false, Path::new("/u/dojo.fish"), "drift", true);
+        let lines =
+            fish_completion_status_lines(&s, false, Path::new("/u/dojo.fish"), "drift", true);
         assert!(
             lines
                 .iter()
@@ -4675,7 +4698,11 @@ mod fish_completion_tests {
             "absent",
             false,
         );
-        assert!(healthy.iter().any(|l| l.contains("provided by /v/dojo.fish")));
+        assert!(
+            healthy
+                .iter()
+                .any(|l| l.contains("provided by /v/dojo.fish"))
+        );
 
         let no_vendor = fish_completion_status_lines(
             &scan(true, None, None, false),
@@ -4701,12 +4728,9 @@ mod fish_completion_tests {
         let s = scan(false, None, Some("/early/dojo.fish"), false);
         let lines =
             fish_completion_status_lines(&s, false, Path::new("/u/dojo.fish"), "absent", false);
-        assert!(
-            lines
-                .iter()
-                .any(|l| l.contains("/early/dojo.fish")
-                    && l.contains("earlier in $fish_complete_path"))
-        );
+        assert!(lines.iter().any(
+            |l| l.contains("/early/dojo.fish") && l.contains("earlier in $fish_complete_path")
+        ));
     }
 
     #[test]

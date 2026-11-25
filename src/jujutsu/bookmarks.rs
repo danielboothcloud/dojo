@@ -44,7 +44,13 @@ pub(crate) const REF_TEMPLATE: &str = concat!(
 pub fn list_refs(repo: &Path) -> Result<Vec<RefState>> {
     let out = run_jj_query(
         repo,
-        &["bookmark", "list", "--all-remotes", "--template", REF_TEMPLATE],
+        &[
+            "bookmark",
+            "list",
+            "--all-remotes",
+            "--template",
+            REF_TEMPLATE,
+        ],
     )?;
     Ok(parse_refs(&out))
 }
@@ -280,11 +286,44 @@ mod tests {
         let out = [
             rec(["fix/goals", "", "1", "0", "0", "c2", "ch2", "", "", ""]),
             rec(["fix/goals", "git", "1", "1", "0", "c2", "ch2", "0", "0", ""]),
-            rec(["fix/goals", "origin", "1", "1", "0", "c1", "ch1", "0", "1", ""]),
-            rec(["fix/goals", "sundae", "1", "0", "0", "c0", "ch0", "", "", ""]),
+            rec([
+                "fix/goals",
+                "origin",
+                "1",
+                "1",
+                "0",
+                "c1",
+                "ch1",
+                "0",
+                "1",
+                "",
+            ]),
+            rec([
+                "fix/goals",
+                "sundae",
+                "1",
+                "0",
+                "0",
+                "c0",
+                "ch0",
+                "",
+                "",
+                "",
+            ]),
             rec(["main", "", "1", "0", "0", "m", "chm", "", "", ""]),
             rec(["main", "origin", "1", "1", "0", "m", "chm", "0", "0", ""]),
-            rec(["only-remote", "sundae", "1", "0", "0", "x", "chx", "", "", ""]),
+            rec([
+                "only-remote",
+                "sundae",
+                "1",
+                "0",
+                "0",
+                "x",
+                "chx",
+                "",
+                "",
+                "",
+            ]),
         ]
         .concat();
         let refs = parse_refs(&out);
@@ -300,10 +339,16 @@ mod tests {
         assert!(!fg.protected);
         let origin = fg.remote("origin").unwrap();
         assert!(origin.tracked);
-        assert_eq!((origin.local_ahead, origin.local_behind), (Some(1), Some(0)));
+        assert_eq!(
+            (origin.local_ahead, origin.local_behind),
+            (Some(1), Some(0))
+        );
         let sundae = fg.remote("sundae").unwrap();
         assert!(!sundae.tracked);
-        assert_eq!((sundae.local_ahead, sundae.local_behind), (Some(2), Some(0)));
+        assert_eq!(
+            (sundae.local_ahead, sundae.local_behind),
+            (Some(2), Some(0))
+        );
         assert!(rows[1].protected);
         assert!(rows[2].local.is_none());
         assert_eq!(rows[2].remote("sundae").unwrap().local_ahead, None);
